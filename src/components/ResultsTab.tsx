@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Exam, ExamResult, EvaluatedScore } from '../types';
+import { Exam, ExamResult, EvaluatedScore, Student } from '../types';
 import { Icons } from './Icons';
 import { OPTS_4, OPTS_5, calculateScore, exportToCSV, isLgsExam } from '../constants';
 
@@ -443,22 +443,54 @@ export function EditResultModal({ student, exam, onClose, onSave }: EditResultMo
 interface ResultsTabProps {
   exam: Exam;
   updateExam: (updates: Partial<Exam>) => void;
+  schoolStudents?: Student[];
   showAlert: (msg: string) => void;
   showConfirm: (msg: string, onConfirm: () => void) => void;
 }
 
-export function ResultsTab({ exam, updateExam, showAlert, showConfirm }: ResultsTabProps) {
+export function ResultsTab({ exam, updateExam, schoolStudents, showAlert, showConfirm }: ResultsTabProps) {
   const [selectedStudent, setSelectedStudent] = useState<(ExamResult & { scores: EvaluatedScore }) | null>(null);
   const [editingStudent, setEditingStudent] = useState<ExamResult | null>(null);
   const [selectedClassFilter, setSelectedClassFilter] = useState("ALL");
   const [isClassDropdownOpen, setIsClassDropdownOpen] = useState(false);
   const [classDropdownSearch, setClassDropdownSearch] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeResultView, setActiveResultView] = useState<'results' | 'absent'>('results');
 
   const isLgs = isLgsExam(exam);
 
   // Mobile layout view: 'cards' | 'table' (default to cards for great mobile UX, or table for dense view)
   const [mobileDisplayMode, setMobileDisplayMode] = useState<'cards' | 'table'>('cards');
+
+  const masterList = useMemo(() => {
+    if (schoolStudents && schoolStudents.length > 0) return schoolStudents;
+    return exam.studentList || [];
+  }, [schoolStudents, exam.studentList]);
+
+  const scannedNosSet = useMemo(() => {
+    return new Set(exam.results.map(r => r.no.toString().trim()));
+  }, [exam.results]);
+
+  const absentStudents = useMemo(() => {
+    return masterList.filter(s => {
+      const sNo = s.no.toString().trim();
+      if (scannedNosSet.has(sNo)) return false;
+
+      if (selectedClassFilter !== "ALL") {
+        const c = (s.classStr || "").trim();
+        const sec = (s.sectionStr || "").trim().toUpperCase();
+        const full = (c && sec) ? `${c}/${sec}` : (c ? `${c}. Sınıf` : '');
+        if (full !== selectedClassFilter) return false;
+      }
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        return s.name.toLowerCase().includes(q) || sNo.includes(q);
+      }
+
+      return true;
+    });
+  }, [masterList, scannedNosSet, selectedClassFilter, searchQuery]);
 
   const confirmDelete = (id: number | string) => {
     showConfirm("Sınav sonucunu silmek istediğinize emin misiniz?", () => {
@@ -480,15 +512,21 @@ export function ResultsTab({ exam, updateExam, showAlert, showConfirm }: Results
   };
 
   const availableClasses = useMemo(() => {
-    const classesList = exam.results.map(r => {
-      const c = r.classStr && r.classStr !== "-" ? r.classStr : "";
-      const s = r.sectionStr && r.sectionStr !== "-" ? r.sectionStr : "";
-      if (!c && !s) return null;
-      if (c && s) return `${c}/${s}`;
-      return c || s;
-    }).filter(Boolean) as string[];
-    return [...new Set(classesList)].sort((a, b) => a.localeCompare(b, 'tr', { numeric: true }));
-  }, [exam.results]);
+    const set = new Set<string>();
+    exam.results.forEach(r => {
+      const c = r.classStr && r.classStr !== "-" ? r.classStr.trim() : "";
+      const s = r.sectionStr && r.sectionStr !== "-" ? r.sectionStr.trim().toUpperCase() : "";
+      if (c && s) set.add(`${c}/${s}`);
+      else if (c) set.add(`${c}. Sınıf`);
+    });
+    masterList.forEach(s => {
+      const c = (s.classStr || "").trim();
+      const sec = (s.sectionStr || "").trim().toUpperCase();
+      if (c && sec) set.add(`${c}/${sec}`);
+      else if (c) set.add(`${c}. Sınıf`);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'tr', { numeric: true }));
+  }, [exam.results, masterList]);
 
   const classCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -502,6 +540,78 @@ export function ResultsTab({ exam, updateExam, showAlert, showConfirm }: Results
     });
     return counts;
   }, [exam.results]);
+
+  const handleCopyAbsentList = () => {
+    if (absentStudents.length === 0) return;
+    const text = `Sınava Girmeyen Öğrenciler (${exam.name} - ${selectedClassFilter === 'ALL' ? 'Tüm Okul' : selectedClassFilter}):\n` +
+      absentStudents.map((s, i) => `${i + 1}. [No: ${s.no}] ${s.name} (${s.classStr || ''}/${s.sectionStr || ''})`).join('\n');
+    navigator.clipboard.writeText(text);
+    showAlert("Sınava girmeyen öğrencilerin listesi panoya kopyalandı.");
+  };
+
+  const handlePrintAbsentList = () => {
+    if (absentStudents.length === 0) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return showAlert("Lütfen pop-up engelleyiciye izin verin.");
+    let html = `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>${exam.name} - Sınava Girmeyenler</title><style>
+      @page { size: A4 portrait; margin: 12mm; }
+      body { font-family: Arial, sans-serif; font-size: 12px; color: #1e293b; padding: 0; margin: 0; }
+      .header { border-bottom: 2px solid #cbd5e1; padding-bottom: 8px; margin-bottom: 16px; }
+      h1 { font-size: 18px; margin: 0 0 4px 0; color: #0f172a; }
+      .sub { font-size: 12px; color: #64748b; font-weight: bold; }
+      table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+      th, td { border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; }
+      th { background-color: #f1f5f9; font-weight: bold; }
+      .no { font-family: monospace; font-weight: bold; color: #dc2626; width: 80px; }
+      .idx { width: 40px; text-align: center; }
+    </style></head><body>
+      <div class="header">
+        <h1>${exam.institution || "EĞİTİM KURUMU"} - ${exam.name}</h1>
+        <div class="sub">SINAVA GİRMEYEN / KATILMAYAN ÖĞRENCİ LİSTESİ (${absentStudents.length} Öğrenci) • Filtre: ${selectedClassFilter === 'ALL' ? 'Tüm Şubeler' : selectedClassFilter}</div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th class="idx">#</th>
+            <th class="no">Okul No</th>
+            <th>Öğrenci Adı Soyadı</th>
+            <th>Sınıf / Şube</th>
+            <th>Durum</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${absentStudents.map((s, idx) => `
+            <tr>
+              <td class="idx">${idx + 1}</td>
+              <td class="no">${s.no}</td>
+              <td style="font-weight:bold;">${s.name}</td>
+              <td>${s.classStr || '-'}/${s.sectionStr || '-'}</td>
+              <td style="color:#dc2626; font-weight:bold;">Sınava Girmedi</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </body></html>`;
+    printWindow.document.write(html);
+    printWindow.document.close();
+    setTimeout(() => { printWindow.focus(); printWindow.print(); }, 500);
+  };
+
+  const handleExportAbsentCSV = () => {
+    if (absentStudents.length === 0) return;
+    let csv = "data:text/csv;charset=utf-8,\uFEFF";
+    csv += "Sıra;Okul No;Öğrenci Adı Soyadı;Sınıf;Şube;Durum\n";
+    absentStudents.forEach((s, idx) => {
+      csv += `${idx + 1};${s.no};${s.name};${s.classStr || ''};${s.sectionStr || ''};Sınava Girmedi\n`;
+    });
+    const encodedUri = encodeURI(csv);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `${exam.name}_Sinava_Girmeyenler.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const evaluatedResults = useMemo(() => {
     let filtered = exam.results;
@@ -867,6 +977,47 @@ export function ResultsTab({ exam, updateExam, showAlert, showConfirm }: Results
         </div>
       </div>
 
+      {/* View Switcher: Sınav Sonuçları vs Sınava Girmeyenler */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={() => setActiveResultView('results')}
+          className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeResultView === 'results'
+              ? 'bg-purple-600 text-white shadow-xs'
+              : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
+          }`}
+        >
+          <Icons.BarChart />
+          <span>Sınav Sonuçları</span>
+          <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ${
+            activeResultView === 'results' ? 'bg-purple-800 text-white' : 'bg-slate-100 text-slate-600'
+          }`}>
+            {evaluatedResults.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveResultView('absent')}
+          className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeResultView === 'absent'
+              ? 'bg-amber-600 text-white shadow-xs'
+              : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
+          }`}
+        >
+          <Icons.Users />
+          <span>Sınava Girmeyenler / Devamsız</span>
+          <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ${
+            activeResultView === 'absent'
+              ? 'bg-amber-800 text-white'
+              : (absentStudents.length > 0 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500')
+          }`}>
+            {absentStudents.length}
+          </span>
+        </button>
+      </div>
+
       {/* Filter and Search Bar */}
       <div className="bg-white rounded-2xl p-3 sm:p-4 shadow-xs border border-slate-200/80 flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
         {/* Search input */}
@@ -1062,8 +1213,118 @@ export function ResultsTab({ exam, updateExam, showAlert, showConfirm }: Results
         </div>
       </div>
 
-      {/* Main Results View */}
-      {evaluatedResults.length === 0 ? (
+      {/* Main Results / Absent View */}
+      {activeResultView === 'absent' ? (
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-xs flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-bold text-slate-800 text-base">
+                  Sınava Katılmayan / Taranmayan Öğrenciler
+                </h4>
+                <span className="text-xs font-bold font-mono px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                  {absentStudents.length} Öğrenci
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Merkezi okul kütüğünüzde kayıtlı olan ancak bu sınav için henüz optik formu okunmamış öğrencilerdir.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleCopyAbsentList}
+                disabled={absentStudents.length === 0}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+                  absentStudents.length === 0
+                    ? 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed'
+                    : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200 active:scale-95'
+                }`}
+                title="Sınava girmeyenleri panoya kopyala (WhatsApp / duyuru için)"
+              >
+                <Icons.Copy />
+                <span>Panoya Kopyala</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handlePrintAbsentList}
+                disabled={absentStudents.length === 0}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+                  absentStudents.length === 0
+                    ? 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200 active:scale-95'
+                }`}
+                title="A4 formatında yazdır"
+              >
+                <Icons.Printer />
+                <span>Yazdır</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportAbsentCSV}
+                disabled={absentStudents.length === 0}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+                  absentStudents.length === 0
+                    ? 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed'
+                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 active:scale-95'
+                }`}
+                title="Excel (CSV) olarak indir"
+              >
+                <Icons.Download />
+                <span>Excel İndir</span>
+              </button>
+            </div>
+          </div>
+
+          {absentStudents.length === 0 ? (
+            <div className="p-8 text-center flex flex-col items-center justify-center gap-2 text-slate-500">
+              <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 text-xl font-bold">
+                ✓
+              </div>
+              <h5 className="font-bold text-slate-800 text-sm sm:text-base">Tüm Öğrenciler Sınava Katıldı</h5>
+              <p className="text-xs text-slate-500 max-w-md">
+                {selectedClassFilter !== "ALL"
+                  ? `${selectedClassFilter} şubesinde optik formu taranmayan eksik öğrenci bulunmamaktadır.`
+                  : "Okul kütüğünüzdeki tüm öğrencilerin optik formları başarıyla taranmıştır."}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full text-left text-xs whitespace-nowrap border-collapse">
+                <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                  <tr>
+                    <th className="p-2.5 text-center w-12">#</th>
+                    <th className="p-2.5">Okul No</th>
+                    <th className="p-2.5">Öğrenci Adı Soyadı</th>
+                    <th className="p-2.5 text-center">Sınıf / Şube</th>
+                    <th className="p-2.5 text-center">Durum</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {absentStudents.map((s, idx) => (
+                    <tr key={`${s.no}-${idx}`} className="hover:bg-amber-50/40 transition-colors">
+                      <td className="p-2.5 text-center font-mono font-bold text-slate-400">{idx + 1}</td>
+                      <td className="p-2.5 font-mono font-bold text-rose-600">{s.no}</td>
+                      <td className="p-2.5 font-bold text-slate-800">{s.name}</td>
+                      <td className="p-2.5 text-center text-slate-600 font-semibold">
+                        {(s.classStr && s.sectionStr) ? `${s.classStr}/${s.sectionStr}` : (s.classStr || s.sectionStr || '-')}
+                      </td>
+                      <td className="p-2.5 text-center">
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                          Sınava Katılmadı
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : evaluatedResults.length === 0 ? (
         <div className="bg-white rounded-2xl p-12 text-center border border-slate-200/80 shadow-xs flex flex-col items-center justify-center gap-3 text-slate-400">
           <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-200/60 flex items-center justify-center text-slate-400 shadow-2xs">
             <Icons.Users />

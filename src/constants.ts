@@ -393,11 +393,29 @@ export function formatClassSec(cStr?: string, sStr?: string): { cls: string; sec
   let cls = (cStr || "").toString().replace(/^"|"$/g, '').trim().toUpperCase();
   let sec = (sStr || "").toString().replace(/^"|"$/g, '').trim().toUpperCase();
 
-  const match = cls.match(/^(\d+)[^A-Z0-9]*([A-ZÇĞİÖŞÜ])$/i);
-  if (match && !sec) {
-    cls = match[1];
-    sec = match[2].toUpperCase();
+  // If section is provided separately, clean up both
+  if (sec) {
+    const secMatch = sec.match(/([A-ZÇĞİÖŞÜ])/i);
+    if (secMatch) sec = secMatch[1].toUpperCase();
+    const clsMatch = cls.match(/(\d+)/);
+    if (clsMatch) cls = clsMatch[1];
+    return { cls, sec };
   }
+
+  // Combined formats: "7A", "7/A", "7-A", "7 A", "7. SINIF A", "7. SINIF / A ŞUBESİ", "8B"
+  const matchCombined = cls.match(/(\d+)\s*(?:\.|\/|-|\s|SINIF|\.SINIF)*\s*([A-ZÇĞİÖŞÜ])(?:\s*(?:ŞUBE|ŞUBESİ|SUBE|SUBESI))?/i);
+  if (matchCombined) {
+    cls = matchCombined[1];
+    sec = matchCombined[2].toUpperCase();
+    return { cls, sec };
+  }
+
+  // Only digits (class only)
+  const onlyDigits = cls.match(/^(\d+)$/);
+  if (onlyDigits) {
+    return { cls: onlyDigits[1], sec: "" };
+  }
+
   return { cls, sec };
 }
 

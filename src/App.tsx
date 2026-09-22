@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Exam, DialogState } from './types';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Exam, DialogState, Student } from './types';
 import { initialExam, getTotalQuestions } from './constants';
 import { Icons } from './components/Icons';
 import { SettingsTab } from './components/SettingsTab';
@@ -42,7 +42,29 @@ export default function App() {
     return [initialExam];
   };
 
+  const loadSavedSchoolStudents = (savedExams: Exam[]): Student[] => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('omr_school_students_master');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch (e) {
+          console.warn("Storage master students parse error:", e);
+        }
+      }
+      // Otomatik Aktarım: Mevcut kayıtlarda öğrenci varsa merkezi kütüğe aktar
+      for (const ex of savedExams) {
+        if (ex.studentList && ex.studentList.length > 0) {
+          return ex.studentList;
+        }
+      }
+    }
+    return [];
+  };
+
   const [exams, setExams] = useState<Exam[]>(loadSavedExams);
+  const [schoolStudents, setSchoolStudents] = useState<Student[]>(() => loadSavedSchoolStudents(exams));
   const [activeExamId, setActiveExamId] = useState<number>(() => exams[0]?.id || initialExam.id);
   const [activeTab, setActiveTab] = useState<string>("read");
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -83,7 +105,28 @@ export default function App() {
     }
   }, [exams]);
 
-  const currentExam = exams.find(e => e.id === activeExamId) || exams[0] || initialExam;
+  // Sabit Okul Öğrenci Kütüğü (Master Roster) Yerel Hafıza Kaydı
+  useEffect(() => {
+    try {
+      localStorage.setItem('omr_school_students_master', JSON.stringify(schoolStudents));
+    } catch (err: any) {
+      console.error("Master students save error:", err);
+    }
+  }, [schoolStudents]);
+
+  // Okul Öğrenci Kütüğünü güncelleme ve tüm sınavlarla senkron tutma
+  const updateSchoolStudents = (newList: Student[]) => {
+    setSchoolStudents(newList);
+    setExams(prev => prev.map(e => ({ ...e, studentList: newList })));
+  };
+
+  const currentExamRaw = exams.find(e => e.id === activeExamId) || exams[0] || initialExam;
+  // Sınav nesnesinin öğrenci listesi daima merkezi okul kütüğünü yansıtır
+  const currentExam = useMemo(() => ({
+    ...currentExamRaw,
+    studentList: schoolStudents.length > 0 ? schoolStudents : (currentExamRaw.studentList || [])
+  }), [currentExamRaw, schoolStudents]);
+
   const totalQ = getTotalQuestions(currentExam.subjects);
 
   // Hafıza kullanım hesabı
@@ -92,6 +135,15 @@ export default function App() {
   const storagePercent = Math.min(100, (storageUsedBytes / (5 * 1024 * 1024)) * 100).toFixed(1);
 
   const updateCurrentExam = (updates: Partial<Exam>) => {
+    // Eğer sınav üzerinden studentList güncelleniyorsa, okul kütüğünü de otomatik senkronize et
+    if (updates.studentList) {
+      setSchoolStudents(updates.studentList);
+      try {
+        localStorage.setItem('omr_school_students_master', JSON.stringify(updates.studentList));
+      } catch (e) {
+        console.error("Master students sync error:", e);
+      }
+    }
     setExams(prev => prev.map(e => (e.id === activeExamId ? { ...e, ...updates } : e)));
   };
 
@@ -99,10 +151,10 @@ export default function App() {
     const newExam: Exam = {
       id: Date.now(),
       name: `Yeni Sınav ${exams.length + 1}`,
-      institution: "EĞİTİM KURUMU",
+      institution: currentExam.institution || "EĞİTİM KURUMU",
       date: new Date().toLocaleDateString('tr-TR'),
-      logo: null,
-      studentList: [],
+      logo: currentExam.logo || null,
+      studentList: schoolStudents, // Okul öğrenci kütüğü otomatik olarak bu sınava bağlanır
       layoutType: 'split',
       subjects: [
         { id: Date.now(), name: "Türkçe", count: 20, section: 1 },
@@ -116,7 +168,7 @@ export default function App() {
     setExams([newExam, ...exams]);
     setActiveExamId(newExam.id);
     setShowExamPicker(false);
-    showAlert(`"${newExam.name}" başarıyla oluşturuldu ve aktif sınav yapıldı.`);
+    showAlert(`"${newExam.name}" başarıyla oluşturuldu! Okul öğrenci kütüğünüz (${schoolStudents.length} öğrenci) otomatik olarak hazır.`);
   };
 
   const handleDeleteExam = (id: number) => {
@@ -145,7 +197,7 @@ export default function App() {
         id: Date.now() + idx + 1
       })),
       keys: JSON.parse(JSON.stringify(target.keys || { A: [], B: [], C: [], D: [] })),
-      studentList: target.studentList ? JSON.parse(JSON.stringify(target.studentList)) : [],
+      studentList: schoolStudents.length > 0 ? schoolStudents : (target.studentList || []),
       results: [] // Temiz yeni taranacak sınav olarak klonlanır
     };
 
@@ -276,11 +328,11 @@ export default function App() {
 
   const tabs = [
     { id: "read", label: "Canlı Tarama", shortLabel: "Tara", icon: <Icons.Camera />, isPrimary: true },
+    { id: "students", label: "Okul Öğrenci Kütüğü", shortLabel: "Öğrenciler", icon: <Icons.Users />, count: schoolStudents.length, isMaster: true },
     { id: "settings", label: "Sınav Ayarları", shortLabel: "Ayarlar", icon: <Icons.BookOpen /> },
     { id: "keys", label: "Cevap Anahtarı", shortLabel: "Cevaplar", icon: <Icons.CheckCircle /> },
-    { id: "students", label: "Öğrenci Listesi", shortLabel: "Öğrenciler", icon: <Icons.Users /> },
     { id: "print", label: "Optik Form Bas", shortLabel: "Form Bas", icon: <Icons.Printer /> },
-    { id: "results", label: "Sonuç Listesi", shortLabel: "Sonuçlar", icon: <Icons.List /> },
+    { id: "results", label: "Sonuç Listesi", shortLabel: "Sonuçlar", icon: <Icons.List />, count: currentExam.results.length },
     { id: "analysis", label: "Soru Analizi", shortLabel: "Analiz", icon: <Icons.BarChart /> }
   ];
 
@@ -771,16 +823,42 @@ export default function App() {
             </button>
           </div>
 
-          {/* Sınav Hazırlığı */}
+          {/* Okul Öğrenci Kütüğü (Tüm Sınavlarda Sabit & Ortak) */}
+          <div>
+            <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider px-3 mb-1.5 flex items-center justify-between">
+              <span>Merkezi Kütük</span>
+              <span className="text-[9px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.2 rounded font-bold">Sabit</span>
+            </div>
+            <button
+              onClick={() => setActiveTab('students')}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all font-medium text-xs cursor-pointer ${
+                activeTab === 'students'
+                  ? 'bg-indigo-600 text-white font-bold shadow-md shadow-indigo-900/40'
+                  : 'text-indigo-200 hover:bg-indigo-950/40 hover:text-white border border-indigo-900/30'
+              }`}
+            >
+              <span className={activeTab === 'students' ? 'text-white' : 'text-indigo-400'}><Icons.Users /></span>
+              <div className="text-left flex-1 min-w-0">
+                <div className="truncate font-bold">Okul Öğrenci Kütüğü</div>
+                <div className="text-[10px] text-indigo-300/70 font-normal">Tüm sınavlarda ortak</div>
+              </div>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold font-mono ${
+                activeTab === 'students' ? 'bg-indigo-800 text-white' : 'bg-indigo-950 text-indigo-300 border border-indigo-800/50'
+              }`}>
+                {schoolStudents.length}
+              </span>
+            </button>
+          </div>
+
+          {/* Aktif Sınav Hazırlığı */}
           <div>
             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-1.5">
-              Sınav Hazırlığı
+              Aktif Sınav Hazırlığı
             </div>
             <div className="space-y-1">
               {[
                 { id: "settings", label: "Sınav Ayarları", icon: <Icons.BookOpen /> },
                 { id: "keys", label: "Cevap Anahtarı", icon: <Icons.CheckCircle /> },
-                { id: "students", label: "Öğrenci Listesi", icon: <Icons.Users />, count: currentExam.studentList?.length },
                 { id: "print", label: "Optik Form Bas", icon: <Icons.Printer /> }
               ].map(item => {
                 const isActive = activeTab === item.id;
@@ -796,11 +874,6 @@ export default function App() {
                   >
                     <span className={isActive ? 'text-white' : 'text-slate-400'}>{item.icon}</span>
                     <span>{item.label}</span>
-                    {item.count !== undefined && item.count > 0 && (
-                      <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-slate-800 text-slate-300">
-                        {item.count}
-                      </span>
-                    )}
                   </button>
                 );
               })}
@@ -1127,6 +1200,8 @@ export default function App() {
             <StudentsTab
               exam={currentExam}
               updateExam={updateCurrentExam}
+              schoolStudents={schoolStudents}
+              updateSchoolStudents={updateSchoolStudents}
               showAlert={showAlert}
               showConfirm={showConfirm}
             />
@@ -1142,6 +1217,7 @@ export default function App() {
             <PrintTab
               exam={currentExam}
               updateExam={updateCurrentExam}
+              schoolStudents={schoolStudents}
               showAlert={showAlert}
             />
           )}
@@ -1152,6 +1228,7 @@ export default function App() {
               setActiveTab={setActiveTab}
               totalQ={totalQ}
               activeTab={activeTab}
+              schoolStudents={schoolStudents}
               showAlert={showAlert}
             />
           )}
@@ -1159,6 +1236,7 @@ export default function App() {
             <ResultsTab
               exam={currentExam}
               updateExam={updateCurrentExam}
+              schoolStudents={schoolStudents}
               showAlert={showAlert}
               showConfirm={showConfirm}
             />

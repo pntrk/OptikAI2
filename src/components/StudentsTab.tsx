@@ -6,11 +6,20 @@ import { formatClassSec, handleDownloadTemplate } from '../constants';
 interface StudentsTabProps {
   exam: Exam;
   updateExam: (updates: Partial<Exam>) => void;
+  schoolStudents?: Student[];
+  updateSchoolStudents?: (newList: Student[]) => void;
   showAlert: (msg: string) => void;
   showConfirm: (msg: string, onConfirm: () => void) => void;
 }
 
-export function StudentsTab({ exam, updateExam, showAlert, showConfirm }: StudentsTabProps) {
+export function StudentsTab({
+  exam,
+  updateExam,
+  schoolStudents,
+  updateSchoolStudents,
+  showAlert,
+  showConfirm
+}: StudentsTabProps) {
   // Form state
   const [no, setNo] = useState("");
   const [name, setName] = useState("");
@@ -29,8 +38,20 @@ export function StudentsTab({ exam, updateExam, showAlert, showConfirm }: Studen
   // Mobile active panel toggle: 'list' | 'add' | 'upload'
   const [activeMobileView, setActiveMobileView] = useState<'list' | 'add' | 'upload'>('list');
 
-  // Student list safely
-  const studentList = useMemo(() => exam.studentList || [], [exam.studentList]);
+  // Student list safely (prioritize master school roster)
+  const studentList = useMemo(() => {
+    if (schoolStudents && schoolStudents.length > 0) return schoolStudents;
+    return exam.studentList || [];
+  }, [schoolStudents, exam.studentList]);
+
+  // Central save helper that synchronizes with the master database
+  const saveStudentList = (newList: Student[]) => {
+    if (updateSchoolStudents) {
+      updateSchoolStudents(newList);
+    } else {
+      updateExam({ studentList: newList });
+    }
+  };
 
   // Unique classes for filter chips
   const classList = useMemo(() => {
@@ -41,7 +62,7 @@ export function StudentsTab({ exam, updateExam, showAlert, showConfirm }: Studen
       if (c && sec) set.add(`${c}/${sec}`);
       else if (c) set.add(`${c}. Sınıf`);
     });
-    return Array.from(set).sort();
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'tr', { numeric: true }));
   }, [studentList]);
 
   // Filtered students
@@ -87,10 +108,10 @@ export function StudentsTab({ exam, updateExam, showAlert, showConfirm }: Studen
         classStr: cls,
         sectionStr: sec
       });
-      showAlert(`${name.trim().toUpperCase()} sisteme eklendi.`);
+      showAlert(`${name.trim().toUpperCase()} okul kütüğüne eklendi.`);
     }
 
-    updateExam({ studentList: newList });
+    saveStudentList(newList);
     resetForm();
     setActiveMobileView('list');
   };
@@ -113,102 +134,324 @@ export function StudentsTab({ exam, updateExam, showAlert, showConfirm }: Studen
   };
 
   const handleDelete = (studentNo: string, studentName: string) => {
-    showConfirm(`${studentName} (${studentNo}) sistemden silinsin mi?`, () => {
-      updateExam({ studentList: studentList.filter(s => s.no.toString() !== studentNo.toString()) });
+    showConfirm(`${studentName} (${studentNo}) okul kütüğünden silinsin mi?`, () => {
+      saveStudentList(studentList.filter(s => s.no.toString() !== studentNo.toString()));
       if (editingStudentNo === studentNo) resetForm();
     });
   };
 
   const confirmDeleteAllStudents = () => {
-    showConfirm("Sistem hafızasındaki TÜM öğrenciler silinecektir. Bu işlem geri alınamaz. Devam edilsin mi?", () => {
-      updateExam({ studentList: [] });
+    showConfirm("Okul kütüğündeki TÜM öğrenciler silinecektir. Bu işlem geri alınamaz. Devam edilsin mi?", () => {
+      saveStudentList([]);
       resetForm();
     });
   };
 
-  const handleStudentListUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
+  // Okul Kütüğünü CSV Olarak Dışa Aktarma
+  const handleExportStudents = () => {
+    if (studentList.length === 0) {
+      return showAlert("Dışa aktarılacak kayıtlı öğrenci bulunmuyor.");
+    }
+    let csvContent = "\uFEFFOkul No;Adı Soyadı;Sınıf;Şube\n";
+    studentList.forEach(s => {
+      csvContent += `${s.no};${s.name};${s.classStr || ""};${s.sectionStr || ""}\n`;
+    });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Okul_Ogrenci_Kutugu_${studentList.length}_Ogrenci.csv`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    showAlert(`Okul kütüğündeki ${studentList.length} öğrenci CSV olarak indirildi.`);
+  };
 
-    reader.onload = (evt) => {
-      const text = (evt.target?.result as string) || "";
-      const lines = text.split('\n');
-      const list: Student[] = [];
+  // ==========================================
+  // PARSER HELPERS FOR BULK STUDENT ROSTER
+  // ==========================================
+  const parseXmlSpreadsheet = (xmlString: string, defaultCls: string, defaultSec: string): Student[] => {
+    const students: Student[] = [];
+    try {
+      // Match all Row tags
+      const rowMatches = xmlString.match(/<Row[\s\S]*?<\/Row>/gi);
+      if (!rowMatches || rowMatches.length === 0) return [];
 
-      let isEokul = false;
-      for (let i = 0; i < Math.min(5, lines.length); i++) {
-        const lowerLine = lines[i].toLowerCase();
-        if (lowerLine.includes('öğrenci no') || lowerLine.includes('cinsiyet')) {
-          isEokul = true;
-          break;
+      let colNo = -1;
+      let colName = -1;
+      let colSurname = -1;
+      let colClass = -1;
+      let colSec = -1;
+      let headerFound = false;
+
+      for (let r = 0; r < rowMatches.length; r++) {
+        const rowContent = rowMatches[r];
+        const cellMatches = rowContent.match(/<Cell[\s\S]*?<\/Cell>|<Cell[^\/>]*\/>/gi) || [];
+        const cells: string[] = [];
+
+        let currentIdx = 0;
+        for (const cellXml of cellMatches) {
+          const indexMatch = cellXml.match(/ss:Index="(\d+)"/i);
+          if (indexMatch) {
+            currentIdx = parseInt(indexMatch[1], 10) - 1; // 1-based to 0-based
+          }
+          const dataMatch = cellXml.match(/<Data[^>]*>([\s\S]*?)<\/Data>/i);
+          const val = dataMatch ? dataMatch[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').trim() : '';
+          cells[currentIdx] = val;
+          currentIdx++;
+        }
+
+        if (cells.length === 0 || cells.every(c => !c)) continue;
+
+        // Check if row is a header row
+        if (!headerFound) {
+          const rowLower = cells.map(c => (c || '').toLowerCase());
+          const hasNo = rowLower.some(c => c === 'no' || c.includes('numara') || c.includes('öğr no') || c.includes('okul no') || c === 'no.');
+          const hasName = rowLower.some(c => c.includes('ad') || c.includes('isim') || c.includes('öğrenci'));
+
+          if (hasNo || hasName) {
+            colNo = rowLower.findIndex(c => c === 'no' || c.includes('numara') || c.includes('öğr no') || c.includes('okul no') || c === 'no.');
+            colName = rowLower.findIndex(c => c === 'adı soyadı' || c === 'ad soyad' || c === 'adı' || c === 'ad' || c.includes('isim') || c.includes('öğrenci'));
+            colSurname = rowLower.findIndex(c => c === 'soyadı' || c === 'soyadi' || c === 'soyad');
+            colClass = rowLower.findIndex(c => c.includes('sınıf') || c.includes('sinif'));
+            colSec = rowLower.findIndex(c => c.includes('şube') || c.includes('sube'));
+
+            if (colNo === -1) colNo = 0;
+            if (colName === -1) colName = 1;
+            if (colClass === -1 && cells.length > 2) colClass = 2;
+
+            headerFound = true;
+            continue;
+          }
+        }
+
+        // If no header was found on first row, default to standard order (col 0: No, col 1: Name, col 2: Class)
+        if (!headerFound) {
+          colNo = 0;
+          colName = 1;
+          colClass = cells.length > 2 ? 2 : -1;
+          headerFound = true;
+        }
+
+        const rawNo = colNo >= 0 && cells[colNo] ? cells[colNo] : '';
+        const noNum = rawNo.replace(/[^\d]/g, '');
+        if (!noNum) continue;
+
+        let nameStr = colName >= 0 && cells[colName] ? cells[colName].trim() : '';
+        if (colSurname !== -1 && cells[colSurname]) {
+          const surnameStr = cells[colSurname].trim();
+          if (surnameStr && !nameStr.toLowerCase().includes(surnameStr.toLowerCase())) {
+            nameStr += ' ' + surnameStr;
+          }
+        }
+
+        // Fallback if name is empty
+        if (!nameStr) {
+          for (let i = 0; i < cells.length; i++) {
+            if (i !== colNo && cells[i] && isNaN(Number(cells[i]))) {
+              nameStr = cells[i].trim();
+              break;
+            }
+          }
+        }
+
+        const rawCls = colClass >= 0 && cells[colClass] ? cells[colClass] : defaultCls;
+        const rawSec = colSec >= 0 && cells[colSec] ? cells[colSec] : defaultSec;
+        const { cls, sec } = formatClassSec(rawCls, rawSec);
+
+        students.push({
+          no: parseInt(noNum, 10).toString(),
+          name: nameStr.toUpperCase(),
+          classStr: cls,
+          sectionStr: sec
+        });
+      }
+    } catch (err) {
+      console.error("XML Spreadsheet ayrıştırma hatası:", err);
+    }
+    return students;
+  };
+
+  const parseHtmlTable = (htmlString: string, defaultCls: string, defaultSec: string): Student[] => {
+    const students: Student[] = [];
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(htmlString, 'text/html');
+      const trNodes = Array.from(doc.querySelectorAll('tr'));
+      if (trNodes.length === 0) return [];
+
+      let colNo = 0;
+      let colName = 1;
+      let colSurname = -1;
+      let colClass = 2;
+      let colSec = -1;
+      let headerFound = false;
+
+      for (const tr of trNodes) {
+        const tdNodes = Array.from(tr.querySelectorAll('th, td'));
+        const cells = tdNodes.map(td => td.textContent?.trim() || '');
+        if (cells.length === 0 || cells.every(c => !c)) continue;
+
+        if (!headerFound) {
+          const rowLower = cells.map(c => c.toLowerCase());
+          const hasNo = rowLower.some(c => c === 'no' || c.includes('numara') || c.includes('öğr no') || c.includes('okul no'));
+          if (hasNo) {
+            colNo = rowLower.findIndex(c => c === 'no' || c.includes('numara') || c.includes('öğr no') || c.includes('okul no'));
+            colName = rowLower.findIndex(c => c.includes('ad') || c.includes('isim'));
+            colSurname = rowLower.findIndex(c => c.includes('soyad'));
+            colClass = rowLower.findIndex(c => c.includes('sınıf') || c.includes('sinif'));
+            colSec = rowLower.findIndex(c => c.includes('şube') || c.includes('sube'));
+
+            if (colNo === -1) colNo = 0;
+            if (colName === -1) colName = 1;
+            if (colClass === -1 && cells.length > 2) colClass = 2;
+            headerFound = true;
+            continue;
+          }
+        }
+
+        const rawNo = colNo >= 0 && cells[colNo] ? cells[colNo] : '';
+        const noNum = rawNo.replace(/[^\d]/g, '');
+        if (!noNum) continue;
+
+        let nameStr = colName >= 0 && cells[colName] ? cells[colName].trim() : '';
+        if (colSurname !== -1 && cells[colSurname]) {
+          const surnameStr = cells[colSurname].trim();
+          if (surnameStr && !nameStr.toLowerCase().includes(surnameStr.toLowerCase())) {
+            nameStr += ' ' + surnameStr;
+          }
+        }
+
+        const rawCls = colClass >= 0 && cells[colClass] ? cells[colClass] : defaultCls;
+        const rawSec = colSec >= 0 && cells[colSec] ? cells[colSec] : defaultSec;
+        const { cls, sec } = formatClassSec(rawCls, rawSec);
+
+        students.push({
+          no: parseInt(noNum, 10).toString(),
+          name: nameStr.toUpperCase(),
+          classStr: cls,
+          sectionStr: sec
+        });
+      }
+    } catch (e) {
+      console.error("HTML Table ayrıştırma hatası:", e);
+    }
+    return students;
+  };
+
+  const parseDelimitedText = (text: string, defaultCls: string, defaultSec: string): Student[] => {
+    const lines = text.split(/\r?\n/);
+    const list: Student[] = [];
+
+    let isEokul = false;
+    for (let i = 0; i < Math.min(5, lines.length); i++) {
+      const lowerLine = lines[i].toLowerCase();
+      if (lowerLine.includes('öğrenci no') || lowerLine.includes('cinsiyet')) {
+        isEokul = true;
+        break;
+      }
+    }
+
+    let colNo = 0, colName = 1, colClass = 2, colSec = 3, colSurname = -1;
+
+    lines.forEach((line, index) => {
+      if (line.trim() === "") return;
+      const parts = line.split(/[,;\t|]/);
+      const cleanParts = parts.map(p => p.replace(/^"|"$/g, '').trim());
+
+      if (isEokul) {
+        const snoStr = cleanParts[0];
+        const noStr = cleanParts[1];
+        if (snoStr && !isNaN(parseFloat(snoStr)) && noStr && !isNaN(parseFloat(noStr))) {
+          const noVal = parseInt(parseFloat(noStr).toString(), 10).toString();
+          const nameParts: string[] = [];
+          for (let i = 2; i < cleanParts.length; i++) {
+            const p = cleanParts[i];
+            if (p !== "" && p.toLowerCase() !== "kız" && p.toLowerCase() !== "erkek") {
+              nameParts.push(p);
+            }
+          }
+          const nameVal = nameParts.join(" ").toUpperCase();
+          const { cls, sec } = formatClassSec(defaultCls, defaultSec);
+          list.push({ no: noVal, name: nameVal, classStr: cls, sectionStr: sec });
+        }
+      } else {
+        if (index === 0) {
+          const headerStr = cleanParts.join(' ').toLowerCase();
+          if (headerStr.includes('numara') || headerStr.includes('no') || headerStr.includes('ad')) {
+            colNo = cleanParts.findIndex(p => p.toLowerCase().includes('numara') || p.toLowerCase() === 'no' || p.toLowerCase() === 'no.');
+            colName = cleanParts.findIndex(p => p.toLowerCase() === 'ad' || p.toLowerCase() === 'adı' || p.toLowerCase().includes('isim') || p.toLowerCase() === 'adı soyadı');
+            if (colName === -1) colName = cleanParts.findIndex(p => p.toLowerCase().includes('ad'));
+            colSurname = cleanParts.findIndex(p => p.toLowerCase().includes('soyad'));
+            colClass = cleanParts.findIndex(p => p.toLowerCase().includes('sınıf') || p.toLowerCase().includes('sinif'));
+            colSec = cleanParts.findIndex(p => p.toLowerCase().includes('şube') || p.toLowerCase().includes('sube'));
+
+            if (colNo === -1) colNo = 0;
+            if (colName === -1) colName = 1;
+            if (colClass === -1) colClass = 2;
+            if (colSec === -1) colSec = 3;
+            return;
+          }
+        }
+
+        const noStr = cleanParts[colNo];
+        const noNum = noStr ? noStr.replace(/[^\d]/g, '') : '';
+        if (noNum) {
+          let nameStr = cleanParts[colName] || "";
+          if (colSurname !== -1 && cleanParts[colSurname]) {
+            if (!nameStr.toLowerCase().includes(cleanParts[colSurname].toLowerCase())) {
+              nameStr += " " + cleanParts[colSurname];
+            }
+          }
+
+          const tempCls = cleanParts[colClass] ? cleanParts[colClass] : defaultCls;
+          const tempSec = cleanParts[colSec] ? cleanParts[colSec] : defaultSec;
+          const { cls, sec } = formatClassSec(tempCls, tempSec);
+
+          list.push({
+            no: parseInt(noNum, 10).toString(),
+            name: nameStr.toUpperCase(),
+            classStr: cls,
+            sectionStr: sec
+          });
         }
       }
+    });
 
-      let colNo = 0, colName = 1, colClass = 2, colSec = 3, colSurname = -1;
+    return list;
+  };
 
-      lines.forEach((line, index) => {
-        if (line.trim() === "") return;
-        const parts = line.split(/[,;\t]/);
-        const cleanParts = parts.map(p => p.replace(/^"|"$/g, '').trim());
+  const handleStudentListUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-        if (isEokul) {
-          const snoStr = cleanParts[0];
-          const noStr = cleanParts[1];
-          if (snoStr && !isNaN(parseFloat(snoStr)) && noStr && !isNaN(parseFloat(noStr))) {
-            const noVal = parseInt(parseFloat(noStr).toString(), 10).toString();
-            const nameParts: string[] = [];
-            for (let i = 2; i < cleanParts.length; i++) {
-              const p = cleanParts[i];
-              if (p !== "" && p.toLowerCase() !== "kız" && p.toLowerCase() !== "erkek") {
-                nameParts.push(p);
-              }
-            }
-            const nameVal = nameParts.join(" ").toUpperCase();
-            const { cls, sec } = formatClassSec(uploadCls, uploadSec);
-            list.push({ no: noVal, name: nameVal, classStr: cls, sectionStr: sec });
-          }
-        } else {
-          if (index === 0) {
-            const headerStr = cleanParts.join(' ').toLowerCase();
-            if (headerStr.includes('numara') || headerStr.includes('no') || headerStr.includes('ad')) {
-              colNo = cleanParts.findIndex(p => p.toLowerCase().includes('numara') || p.toLowerCase() === 'no');
-              colName = cleanParts.findIndex(p => p.toLowerCase() === 'ad' || p.toLowerCase() === 'adı' || p.toLowerCase().includes('isim'));
-              if (colName === -1) colName = cleanParts.findIndex(p => p.toLowerCase().includes('ad'));
-              colSurname = cleanParts.findIndex(p => p.toLowerCase().includes('soyad'));
-              colClass = cleanParts.findIndex(p => p.toLowerCase().includes('sınıf') || p.toLowerCase().includes('sinif'));
-              colSec = cleanParts.findIndex(p => p.toLowerCase().includes('şube') || p.toLowerCase().includes('sube'));
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      let text = "";
 
-              if (colNo === -1) colNo = 0;
-              if (colName === -1) colName = 1;
-              if (colClass === -1) colClass = 2;
-              if (colSec === -1) colSec = 3;
-              return;
-            }
-          }
+      // Otomatik karakter kodlaması tespiti (UTF-8 / Windows-1254 Türkçe ANSI)
+      try {
+        const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+        text = utf8Decoder.decode(arrayBuffer);
+      } catch {
+        const winDecoder = new TextDecoder("windows-1254");
+        text = winDecoder.decode(arrayBuffer);
+      }
 
-          const noStr = cleanParts[colNo];
-          if (noStr && !isNaN(parseInt(noStr, 10))) {
-            let nameStr = cleanParts[colName] || "";
-            if (colSurname !== -1 && cleanParts[colSurname]) {
-              if (!nameStr.toLowerCase().includes(cleanParts[colSurname].toLowerCase())) {
-                nameStr += " " + cleanParts[colSurname];
-              }
-            }
+      let list: Student[] = [];
 
-            const tempCls = cleanParts[colClass] ? cleanParts[colClass] : uploadCls;
-            const tempSec = cleanParts[colSec] ? cleanParts[colSec] : uploadSec;
-            const { cls, sec } = formatClassSec(tempCls, tempSec);
-
-            list.push({
-              no: parseInt(noStr, 10).toString(),
-              name: nameStr.toUpperCase(),
-              classStr: cls,
-              sectionStr: sec
-            });
-          }
-        }
-      });
+      // 1. Excel XML Spreadsheet Formatı (<?xml ... <Workbook>)
+      if (text.includes('<Workbook') || text.includes('<?mso-application progid="Excel.Sheet"?>') || text.includes('<Table') || (text.includes('<Row') && text.includes('<Cell>'))) {
+        list = parseXmlSpreadsheet(text, uploadCls, uploadSec);
+      }
+      // 2. HTML Table Formatı
+      else if (text.includes('<table') || text.includes('<TABLE')) {
+        list = parseHtmlTable(text, uploadCls, uploadSec);
+      }
+      // 3. Standart CSV / TSV / Metin Formatı
+      else {
+        list = parseDelimitedText(text, uploadCls, uploadSec);
+      }
 
       if (list.length > 0) {
         const currentList = [...studentList];
@@ -226,21 +469,23 @@ export function StudentsTab({ exam, updateExam, showAlert, showConfirm }: Studen
           }
         });
 
-        updateExam({ studentList: currentList });
-        showAlert(`Toplu işlem başarılı! ${added} yeni öğrenci eklendi, ${updated} kayıt güncellendi.`);
+        saveStudentList(currentList);
+        showAlert(`Toplu işlem başarılı! ${added} yeni öğrenci okul kütüğüne eklendi, ${updated} kayıt güncellendi. (Toplam: ${currentList.length} öğrenci)`);
         setActiveMobileView('list');
       } else {
-        showAlert("Listeden öğrenci okunamadı. Lütfen CSV formatını kontrol edin.");
+        showAlert("Dosyadan öğrenci kaydı okunamadı. Lütfen Excel XML, CSV veya TXT dosyanızı kontrol edin.");
       }
-    };
-
-    reader.readAsText(file, 'windows-1254');
-    if (e.target) e.target.value = "";
+    } catch (err) {
+      console.error("Öğrenci dosyası yükleme hatası:", err);
+      showAlert("Dosya okunurken bir hata oluştu. Lütfen geçerli bir dosya seçin.");
+    } finally {
+      if (e.target) e.target.value = "";
+    }
   };
 
   return (
     <div className="bg-slate-50 min-h-full flex flex-col gap-3 pb-8">
-      {/* Header Summary Card */}
+      {/* Header Summary Card & Master Information Banner */}
       <div className="bg-white rounded-2xl p-3.5 sm:p-5 shadow-xs border border-slate-200/80">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
           <div className="flex items-center gap-3">
@@ -248,29 +493,46 @@ export function StudentsTab({ exam, updateExam, showAlert, showConfirm }: Studen
               <Icons.Users />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-base sm:text-lg font-bold text-slate-800 tracking-tight">
-                  Öğrenci Listesi Yönetimi
+                  Okul Öğrenci Kütüğü
                 </h3>
-                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">
                   {studentList.length} Öğrenci Kayıtlı
+                </span>
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Tüm Sınavlarda Ortak & Sabit
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Kişiye özel optik formlar ve optik taramada isim eşleştirme için kullanılır
+                Bu listedeki öğrenciler okulunuzun tüm sınavlarında, optik form basımında ve canlı taramada otomatik olarak tanınır.
               </p>
             </div>
           </div>
 
-          {/* Quick Actions (Boş Şablon & Tümünü Sil) */}
-          <div className="flex items-center gap-2 self-stretch sm:self-auto">
+          {/* Quick Actions (Kütüğü İndir, Şablon & Tümünü Sil) */}
+          <div className="flex items-center gap-2 self-stretch sm:self-auto flex-wrap">
+            <button
+              onClick={handleExportStudents}
+              disabled={studentList.length === 0}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                studentList.length === 0
+                  ? 'text-slate-300 bg-slate-50 border-slate-200 cursor-not-allowed'
+                  : 'text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border-indigo-200 active:scale-95'
+              }`}
+              title="Okul Öğrenci Kütüğünü CSV Olarak İndir"
+            >
+              <Icons.Download />
+              <span>Kütüğü İndir</span>
+            </button>
             <button
               onClick={handleDownloadTemplate}
               className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 active:scale-95 rounded-lg border border-slate-200 transition-all cursor-pointer"
               title="Örnek CSV Şablonunu İndir"
             >
               <Icons.Download />
-              <span>Şablon İndir</span>
+              <span>Şablon</span>
             </button>
             <button
               onClick={confirmDeleteAllStudents}
@@ -285,6 +547,16 @@ export function StudentsTab({ exam, updateExam, showAlert, showConfirm }: Studen
               <Icons.Trash />
               <span>Tümünü Sil</span>
             </button>
+          </div>
+        </div>
+
+        {/* Bilgilendirme Notu: Okul Genelinde Pratik Kullanım */}
+        <div className="mt-3 bg-gradient-to-r from-indigo-50/70 via-blue-50/50 to-slate-50 p-2.5 rounded-xl border border-indigo-100/80 flex items-start gap-2.5 text-xs text-indigo-950">
+          <div className="text-indigo-600 shrink-0 mt-0.5">
+            <Icons.BookOpen />
+          </div>
+          <div className="leading-relaxed">
+            <span className="font-bold text-indigo-900">Okul Genelinde Pratik Kullanım:</span> Sınavdan sınava sınav adı, dersler, cevap anahtarı, taranan kağıtlar ve sonuçlar değişirken; buraya yüklediğiniz <strong>öğrenci kütüğü sabit kalır</strong>. Bir sonraki deneme veya yazılı sınavda öğrencileri tekrar girmekle vakit kaybetmezsiniz.
           </div>
         </div>
 
@@ -434,7 +706,7 @@ export function StudentsTab({ exam, updateExam, showAlert, showConfirm }: Studen
               </div>
 
               <p className="text-xs text-slate-500 leading-relaxed mb-3">
-                E-Okul öğrenci listesini veya hazırladığınız CSV dosyasını doğrudan aktarabilirsiniz.
+                e-Okul'dan aldığınız Excel (XML), XLS, CSV veya metin formatındaki kütük listelerini doğrudan aktarabilirsiniz.
               </p>
 
               {/* Optional Class & Section override */}
@@ -461,19 +733,40 @@ export function StudentsTab({ exam, updateExam, showAlert, showConfirm }: Studen
               </div>
 
               {/* File upload drag/click box */}
-              <label className="w-full group flex flex-col items-center justify-center p-4 border-2 border-dashed border-emerald-300 hover:border-emerald-500 bg-emerald-50/40 hover:bg-emerald-50/80 rounded-xl cursor-pointer transition-all">
-                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform shadow-2xs">
+              <label className="w-full group flex flex-col items-center justify-center p-4 sm:p-5 border-2 border-dashed border-emerald-300 hover:border-emerald-500 bg-gradient-to-b from-emerald-50/50 to-teal-50/30 hover:from-emerald-50/80 hover:to-teal-50/60 rounded-2xl cursor-pointer transition-all duration-200 shadow-xs hover:shadow-md hover:shadow-emerald-500/10 active:scale-99">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center mb-2.5 group-hover:scale-105 group-hover:bg-emerald-600 transition-all shadow-md shadow-emerald-500/20">
                   <Icons.Upload />
                 </div>
-                <span className="text-xs font-bold text-emerald-800">
-                  CSV veya TXT Dosyası Seçin
+                <span className="text-xs sm:text-sm font-bold text-slate-800 text-center">
+                  Excel (XML / XLS), CSV veya TXT Seçin
                 </span>
-                <span className="text-[11px] text-emerald-600/80 mt-0.5">
-                  E-Okul veya Standart Excel CSV
+                <span className="text-[11px] text-slate-500 text-center mt-0.5">
+                  Tıklayın veya dosyayı buraya sürükleyip bırakın
                 </span>
+
+                {/* Format Badges */}
+                <div className="flex items-center gap-1.5 mt-2.5 flex-wrap justify-center">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    .XML (Excel)
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-200">
+                    .XLS / .XLSX
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                    .CSV
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                    .TXT
+                  </span>
+                </div>
+
+                <div className="mt-2 text-[10px] font-medium text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <span>✓</span> e-Okul kütük şablonu tam uyumlu
+                </div>
+
                 <input
                   type="file"
-                  accept=".csv, .txt"
+                  accept=".xml, .xls, .xlsx, .csv, .txt, text/csv, text/plain, application/xml, text/xml, application/vnd.ms-excel"
                   onChange={handleStudentListUpload}
                   className="hidden"
                 />

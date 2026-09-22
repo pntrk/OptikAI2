@@ -241,14 +241,21 @@ export function PrintLayout({ exam, isColorMode, student }: PrintLayoutProps) {
 interface PrintTabProps {
   exam: Exam;
   updateExam: (updates: Partial<Exam>) => void;
+  schoolStudents?: Student[];
   showAlert: (msg: string) => void;
 }
 
-export function PrintTab({ exam, updateExam: _updateExam, showAlert }: PrintTabProps) {
+export function PrintTab({ exam, updateExam: _updateExam, schoolStudents, showAlert }: PrintTabProps) {
   const [isColorMode, setIsColorMode] = useState(true);
   const [printFormat, setPrintFormat] = useState<'standard' | 'mebi'>('standard');
   const [selectedClassFilter, setSelectedClassFilter] = useState("ALL");
   const [isPrinting, setIsPrinting] = useState(false);
+
+  // Active student list (prioritizing master school roster)
+  const effectiveStudentList = useMemo(() => {
+    if (schoolStudents && schoolStudents.length > 0) return schoolStudents;
+    return exam.studentList || [];
+  }, [schoolStudents, exam.studentList]);
 
   // Zoom scale for preview: auto-adaptive for mobile/desktop
   const [previewScale, setPreviewScale] = useState<number>(() => {
@@ -259,8 +266,8 @@ export function PrintTab({ exam, updateExam: _updateExam, showAlert }: PrintTabP
   });
 
   const availableClasses = useMemo(() => {
-    if (!exam.studentList) return [];
-    const classesList = exam.studentList.map(r => {
+    if (!effectiveStudentList) return [];
+    const classesList = effectiveStudentList.map(r => {
       const c = r.classStr && r.classStr !== "-" ? r.classStr : "";
       const s = r.sectionStr && r.sectionStr !== "-" ? r.sectionStr : "";
       if (!c && !s) return null;
@@ -268,7 +275,7 @@ export function PrintTab({ exam, updateExam: _updateExam, showAlert }: PrintTabP
       return c || s;
     }).filter(Boolean) as string[];
     return [...new Set(classesList)].sort((a, b) => a.localeCompare(b, 'tr', { numeric: true }));
-  }, [exam.studentList]);
+  }, [effectiveStudentList]);
 
   // Compute print students based on format and filter
   const printStudents = useMemo(() => {
@@ -276,21 +283,21 @@ export function PrintTab({ exam, updateExam: _updateExam, showAlert }: PrintTabP
       return [null];
     }
 
-    if (!exam.studentList || exam.studentList.length === 0) {
+    if (!effectiveStudentList || effectiveStudentList.length === 0) {
       return [];
     }
 
     if (selectedClassFilter === "ALL") {
-      return exam.studentList;
+      return effectiveStudentList;
     }
 
-    return exam.studentList.filter(r => {
+    return effectiveStudentList.filter(r => {
       const c = r.classStr && r.classStr !== "-" ? r.classStr : "";
       const s = r.sectionStr && r.sectionStr !== "-" ? r.sectionStr : "";
       const val = (c && s) ? `${c}/${s}` : (c || s || "");
       return val === selectedClassFilter;
     });
-  }, [printFormat, exam.studentList, selectedClassFilter]);
+  }, [printFormat, effectiveStudentList, selectedClassFilter]);
 
   const handlePrint = () => {
     if (printFormat === 'mebi' && printStudents.length === 0) {

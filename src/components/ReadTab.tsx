@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Exam, Anchors, Point, LaserMark } from '../types';
+import { Exam, Anchors, Point, LaserMark, Student } from '../types';
 import { Icons } from './Icons';
 import { DEFAULT_OMR, OPTS_4, OPTS_5, getHomography, applyHomography, getQuestionsLayout } from '../constants';
 
@@ -9,10 +9,11 @@ interface ReadTabProps {
   setActiveTab: (tab: string) => void;
   totalQ: number;
   activeTab: string;
+  schoolStudents?: Student[];
   showAlert: (msg: string) => void;
 }
 
-export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ, activeTab, showAlert }: ReadTabProps) {
+export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ, activeTab, schoolStudents, showAlert }: ReadTabProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -1143,8 +1144,9 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
             cleanSec = bubbleSec;
             finalBk = bubbleBk.length > 0 ? bubbleBk : "A";
 
-            if (exam.studentList && exam.studentList.length > 0 && finalNo !== "BOŞ") {
-              const matchedStudent = exam.studentList.find(s => parseInt(s.no, 10) === parseInt(finalNo, 10));
+            const effectiveList = (schoolStudents && schoolStudents.length > 0) ? schoolStudents : (exam.studentList || []);
+            if (effectiveList.length > 0 && finalNo !== "BOŞ") {
+              const matchedStudent = effectiveList.find(s => parseInt(s.no, 10) === parseInt(finalNo, 10));
               if (matchedStudent) {
                 if (finalName !== matchedStudent.name || cleanCls !== matchedStudent.classStr || cleanSec !== matchedStudent.sectionStr) {
                   autoCorrected = true;
