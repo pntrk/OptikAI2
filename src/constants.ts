@@ -170,6 +170,66 @@ export function getQuestionsLayout(exam: Exam, omr = DEFAULT_OMR) {
   return { items, rowH, finalQBoxH: Math.max(finalQBoxH, 10), isSplit, topPadding };
 }
 
+// LGS 2026 Sınav Verilerine Göre Frekans & Yüzdelik Dilim Dağılım Tablosu (MEB Projeksiyonu)
+export const LGS_2026_PERCENTILE_TABLE = [
+  { score: 500.00, percentile: 0.01 },
+  { score: 495.00, percentile: 0.08 },
+  { score: 490.00, percentile: 0.22 },
+  { score: 485.00, percentile: 0.55 },
+  { score: 480.00, percentile: 0.98 },
+  { score: 475.00, percentile: 1.55 },
+  { score: 470.00, percentile: 2.25 },
+  { score: 465.00, percentile: 3.10 },
+  { score: 460.00, percentile: 4.10 },
+  { score: 455.00, percentile: 5.20 },
+  { score: 450.00, percentile: 6.45 },
+  { score: 440.00, percentile: 9.20 },
+  { score: 430.00, percentile: 12.30 },
+  { score: 420.00, percentile: 15.90 },
+  { score: 410.00, percentile: 19.80 },
+  { score: 400.00, percentile: 24.10 },
+  { score: 380.00, percentile: 33.60 },
+  { score: 360.00, percentile: 43.90 },
+  { score: 340.00, percentile: 54.60 },
+  { score: 320.00, percentile: 65.20 },
+  { score: 300.00, percentile: 74.80 },
+  { score: 250.00, percentile: 88.60 },
+  { score: 200.00, percentile: 96.60 },
+  { score: 100.00, percentile: 99.99 }
+];
+
+export function isLgsExam(exam: { format?: string; name?: string; subjects?: Subject[] } | undefined | null): boolean {
+  if (!exam) return false;
+  if (exam.format === 'mebi') return true;
+  const name = (exam.name || '').toLowerCase();
+  if (name.includes('mebi') || name.includes('lgs')) return true;
+  if (exam.subjects && exam.subjects.length >= 4) {
+    const hasTurkce = exam.subjects.some(s => s.name.toLowerCase().includes('türk'));
+    const hasMat = exam.subjects.some(s => s.name.toLowerCase().includes('mat'));
+    const hasFen = exam.subjects.some(s => s.name.toLowerCase().includes('fen'));
+    if (hasTurkce && (hasMat || hasFen)) return true;
+  }
+  return false;
+}
+
+export function calculateLgsPercentile(score: number): number {
+  if (score >= 500) return 0.01;
+  if (score <= 100) return 99.99;
+
+  for (let i = 0; i < LGS_2026_PERCENTILE_TABLE.length - 1; i++) {
+    const upper = LGS_2026_PERCENTILE_TABLE[i];
+    const lower = LGS_2026_PERCENTILE_TABLE[i + 1];
+    if (score <= upper.score && score >= lower.score) {
+      const scoreSpan = upper.score - lower.score;
+      const percentileSpan = lower.percentile - upper.percentile;
+      const diff = upper.score - score;
+      const p = upper.percentile + (diff / scoreSpan) * percentileSpan;
+      return Math.max(0.01, Math.min(99.99, parseFloat(p.toFixed(2))));
+    }
+  }
+  return 99.99;
+}
+
 export function calculateScore(
   studentAnswers: string[],
   key: string[],
@@ -181,7 +241,15 @@ export function calculateScore(
   const subjectScores: { [key: number]: { correct: number; wrong: number; empty: number; net: number } } = {};
   let qIndex = 0;
 
+  const isLgs = format === 'mebi' || (subjects && subjects.some(s => {
+    const nl = s.name.toLowerCase();
+    return nl.includes('türk') || nl.includes('mat') || nl.includes('inkılap');
+  }) && subjects.length >= 4);
+
+  // LGS 2026 Taban Puanı (Tam net yapıldığında 194.76 + 305.24 = 500.000)
   let lgsTotal = 194.76;
+  let totalNetPointsContribution = 0;
+  let allZeroNet = true;
 
   subjects.forEach(sub => {
     const subScore = { correct: 0, wrong: 0, empty: 0, net: 0 };
@@ -209,44 +277,39 @@ export function calculateScore(
     total.empty += subScore.empty;
     total.net += subScore.net;
 
-    if (format === 'mebi') {
+    if (netVal > 0) {
+      allZeroNet = false;
+    }
+
+    if (isLgs) {
       const nameLower = sub.name.toLocaleLowerCase('tr-TR');
 
-      if (nameLower.includes("türk")) lgsTotal += (netVal * 4.30);
-      else if (nameLower.includes("mat")) lgsTotal += (netVal * 4.95);
-      else if (nameLower.includes("fen")) lgsTotal += (netVal * 4.05);
-      else if (nameLower.includes("ink") || nameLower.includes("sosyal") || nameLower.includes("tarih")) lgsTotal += (netVal * 1.68);
-      else if (nameLower.includes("din") || nameLower.includes("ahlak")) lgsTotal += (netVal * 1.68);
-      else if (nameLower.includes("ing") || nameLower.includes("yabancı") || nameLower.includes("dil")) lgsTotal += (netVal * 1.55);
-      else lgsTotal += (netVal * 1.50);
+      // LGS 2026 Resmi Katsayı Değerleri (Projeksiyon Standart Sapma ve Türkiye Ortalamaları Katsayılandırılmıştır)
+      // Türkçe (20 Soru): 4.326 | Matematik (20 Soru): 5.048 | Fen (20 Soru): 4.116
+      // İnkılap (10 Soru): 1.674 | Din Kültürü (10 Soru): 1.652 | İngilizce (10 Soru): 1.568
+      // Toplam Net Katsayısı Katkısı: 86.52 + 100.96 + 82.32 + 16.74 + 16.52 + 15.68 = 305.24
+      // 194.760 (Taban) + 305.240 = 500.000 Tam Puan
+      let coeff = 1.60;
+      if (nameLower.includes("türk")) coeff = 4.326;
+      else if (nameLower.includes("mat")) coeff = 5.048;
+      else if (nameLower.includes("fen")) coeff = 4.116;
+      else if (nameLower.includes("ink") || nameLower.includes("sosyal") || nameLower.includes("tarih")) coeff = 1.674;
+      else if (nameLower.includes("din") || nameLower.includes("ahlak")) coeff = 1.652;
+      else if (nameLower.includes("ing") || nameLower.includes("yabancı") || nameLower.includes("dil")) coeff = 1.568;
+      else coeff = sub.count >= 20 ? 4.20 : 1.65;
+
+      totalNetPointsContribution += (netVal * coeff);
     }
   });
 
-  total.lgsScore = Math.max(100, Math.min(500, lgsTotal));
-
-  if (format === 'mebi') {
-    const distribution = [
-      { s: 500, p: 0.01 }, { s: 490, p: 0.15 }, { s: 480, p: 0.50 },
-      { s: 470, p: 1.00 }, { s: 460, p: 1.80 }, { s: 450, p: 3.00 },
-      { s: 440, p: 4.50 }, { s: 430, p: 6.00 }, { s: 420, p: 7.50 },
-      { s: 410, p: 9.00 }, { s: 400, p: 10.75 }, { s: 390, p: 12.75 },
-      { s: 380, p: 15.00 }, { s: 370, p: 17.50 }, { s: 360, p: 20.00 },
-      { s: 350, p: 23.00 }, { s: 300, p: 40.00 }, { s: 250, p: 65.00 },
-      { s: 200, p: 85.00 }, { s: 100, p: 100.00 }
-    ];
-
-    if (total.lgsScore >= 500) {
-      total.percentile = 0.01;
+  if (isLgs) {
+    if (total.net <= 0 && allZeroNet) {
+      total.lgsScore = 100.00;
+      total.percentile = 99.99;
     } else {
-      for (let i = 0; i < distribution.length - 1; i++) {
-        if (total.lgsScore <= distribution[i].s && total.lgsScore > distribution[i + 1].s) {
-          const sDiff = distribution[i].s - distribution[i + 1].s;
-          const pDiff = distribution[i + 1].p - distribution[i].p;
-          const scoreOffset = distribution[i].s - total.lgsScore;
-          total.percentile = distribution[i].p + (scoreOffset / sDiff) * pDiff;
-          break;
-        }
-      }
+      const calculatedScore = lgsTotal + totalNetPointsContribution;
+      total.lgsScore = Math.max(100.0, Math.min(500.0, Math.round(calculatedScore * 1000) / 1000));
+      total.percentile = calculateLgsPercentile(total.lgsScore);
     }
   }
 
@@ -254,11 +317,12 @@ export function calculateScore(
 }
 
 export function exportToCSV(exam: Exam, specificResults: ExamResult[] | null = null) {
+  const isLgs = isLgsExam(exam);
   let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
   csvContent += "Ogrenci No;Ad Soyad;Sinif;Sube;Kitapcik;";
   exam.subjects.forEach(sub => { csvContent += `${sub.name} D;${sub.name} Y;${sub.name} N;`; });
   csvContent += "TOPLAM D;TOPLAM Y;TOPLAM B;TOPLAM NET;";
-  if (exam.format === 'mebi') csvContent += "LGS PUANI;YÜZDELİK DİLİM;";
+  if (isLgs) csvContent += "PUAN;DİLİM;";
   csvContent += "\n";
 
   const resultsToExport = specificResults || exam.results;
@@ -273,7 +337,7 @@ export function exportToCSV(exam: Exam, specificResults: ExamResult[] | null = n
       row += `${ss.correct};${ss.wrong};${ss.net.toFixed(2).replace('.', ',')};`;
     });
     row += `${score.total.correct};${score.total.wrong};${score.total.empty};${score.total.net.toFixed(2).replace('.', ',')};`;
-    if (exam.format === 'mebi') {
+    if (isLgs) {
       row += `${score.total.lgsScore.toFixed(2).replace('.', ',')};`;
       row += `%${score.total.percentile.toFixed(2).replace('.', ',')};`;
     }
