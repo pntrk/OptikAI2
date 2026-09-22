@@ -108,7 +108,7 @@ export function StudentsTab({
         classStr: cls,
         sectionStr: sec
       });
-      showAlert(`${name.trim().toUpperCase()} okul kütüğüne eklendi.`);
+      showAlert(`${name.trim().toUpperCase()} öğrenci listesine eklendi.`);
     }
 
     saveStudentList(newList);
@@ -134,20 +134,20 @@ export function StudentsTab({
   };
 
   const handleDelete = (studentNo: string, studentName: string) => {
-    showConfirm(`${studentName} (${studentNo}) okul kütüğünden silinsin mi?`, () => {
+    showConfirm(`${studentName} (${studentNo}) öğrenci listesinden silinsin mi?`, () => {
       saveStudentList(studentList.filter(s => s.no.toString() !== studentNo.toString()));
       if (editingStudentNo === studentNo) resetForm();
     });
   };
 
   const confirmDeleteAllStudents = () => {
-    showConfirm("Okul kütüğündeki TÜM öğrenciler silinecektir. Bu işlem geri alınamaz. Devam edilsin mi?", () => {
+    showConfirm("Öğrenci listesindeki TÜM öğrenciler silinecektir. Bu işlem geri alınamaz. Devam edilsin mi?", () => {
       saveStudentList([]);
       resetForm();
     });
   };
 
-  // Okul Kütüğünü CSV Olarak Dışa Aktarma
+  // Öğrenci Listesini CSV Olarak Dışa Aktarma
   const handleExportStudents = () => {
     if (studentList.length === 0) {
       return showAlert("Dışa aktarılacak kayıtlı öğrenci bulunmuyor.");
@@ -160,11 +160,11 @@ export function StudentsTab({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `Okul_Ogrenci_Kutugu_${studentList.length}_Ogrenci.csv`);
+    link.setAttribute("download", `Ogrenci_Listesi_${studentList.length}_Ogrenci.csv`);
     document.body.appendChild(link);
     link.click();
     link.remove();
-    showAlert(`Okul kütüğündeki ${studentList.length} öğrenci CSV olarak indirildi.`);
+    showAlert(`Öğrenci listesindeki ${studentList.length} öğrenci CSV olarak indirildi.`);
   };
 
   // ==========================================
@@ -470,7 +470,7 @@ export function StudentsTab({
         });
 
         saveStudentList(currentList);
-        showAlert(`Toplu işlem başarılı! ${added} yeni öğrenci okul kütüğüne eklendi, ${updated} kayıt güncellendi. (Toplam: ${currentList.length} öğrenci)`);
+        showAlert(`Toplu işlem başarılı! ${added} yeni öğrenci listeye eklendi, ${updated} kayıt güncellendi. (Toplam: ${currentList.length} öğrenci)`);
         setActiveMobileView('list');
       } else {
         showAlert("Dosyadan öğrenci kaydı okunamadı. Lütfen Excel XML, CSV veya TXT dosyanızı kontrol edin.");
@@ -486,49 +486,46 @@ export function StudentsTab({
   return (
     <div className="bg-slate-50 min-h-full flex flex-col gap-3 pb-8">
       {/* Header Summary Card & Master Information Banner */}
-      <div className="bg-white rounded-2xl p-3.5 sm:p-5 shadow-xs border border-slate-200/80">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-xs shrink-0">
+      <div className="bg-white rounded-xl p-2.5 sm:p-3.5 shadow-2xs border border-slate-200/80">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 sm:pb-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100/80 flex items-center justify-center text-indigo-600 shadow-2xs shrink-0">
               <Icons.Users />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-base sm:text-lg font-bold text-slate-800 tracking-tight">
-                  Okul Öğrenci Kütüğü
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
+                  Öğrenci Listesi
                 </h3>
-                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">
-                  {studentList.length} Öğrenci Kayıtlı
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/70 font-mono">
+                  {studentList.length} Kayıt
                 </span>
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Tüm Sınavlarda Ortak & Sabit
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60 hidden sm:inline-flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Ortak Liste
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Bu listedeki öğrenciler okulunuzun tüm sınavlarında, optik form basımında ve canlı taramada otomatik olarak tanınır.
-              </p>
             </div>
           </div>
 
-          {/* Quick Actions (Kütüğü İndir, Şablon & Tümünü Sil) */}
-          <div className="flex items-center gap-2 self-stretch sm:self-auto flex-wrap">
+          {/* Quick Actions (Listeyi İndir, Şablon & Tümünü Sil) */}
+          <div className="flex items-center gap-1.5 self-stretch sm:self-auto flex-wrap">
             <button
               onClick={handleExportStudents}
               disabled={studentList.length === 0}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
                 studentList.length === 0
                   ? 'text-slate-300 bg-slate-50 border-slate-200 cursor-not-allowed'
                   : 'text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border-indigo-200 active:scale-95'
               }`}
-              title="Okul Öğrenci Kütüğünü CSV Olarak İndir"
+              title="Öğrenci Listesini CSV Olarak İndir"
             >
               <Icons.Download />
-              <span>Kütüğü İndir</span>
+              <span>Listeyi İndir</span>
             </button>
             <button
               onClick={handleDownloadTemplate}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 active:scale-95 rounded-lg border border-slate-200 transition-all cursor-pointer"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1 px-2.5 py-1 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 active:scale-95 rounded-lg border border-slate-200 transition-all cursor-pointer"
               title="Örnek CSV Şablonunu İndir"
             >
               <Icons.Download />
@@ -537,7 +534,7 @@ export function StudentsTab({
             <button
               onClick={confirmDeleteAllStudents}
               disabled={studentList.length === 0}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
                 studentList.length === 0
                   ? 'text-slate-300 bg-slate-50 border-slate-200 cursor-not-allowed'
                   : 'text-red-600 bg-red-50 hover:bg-red-100 border-red-200 active:scale-95'
@@ -550,18 +547,8 @@ export function StudentsTab({
           </div>
         </div>
 
-        {/* Bilgilendirme Notu: Okul Genelinde Pratik Kullanım */}
-        <div className="mt-3 bg-gradient-to-r from-indigo-50/70 via-blue-50/50 to-slate-50 p-2.5 rounded-xl border border-indigo-100/80 flex items-start gap-2.5 text-xs text-indigo-950">
-          <div className="text-indigo-600 shrink-0 mt-0.5">
-            <Icons.BookOpen />
-          </div>
-          <div className="leading-relaxed">
-            <span className="font-bold text-indigo-900">Okul Genelinde Pratik Kullanım:</span> Sınavdan sınava sınav adı, dersler, cevap anahtarı, taranan kağıtlar ve sonuçlar değişirken; buraya yüklediğiniz <strong>öğrenci kütüğü sabit kalır</strong>. Bir sonraki deneme veya yazılı sınavda öğrencileri tekrar girmekle vakit kaybetmezsiniz.
-          </div>
-        </div>
-
         {/* Mobile Navigation Segmented Tabs (Visible on small screens) */}
-        <div className="grid grid-cols-3 gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 mt-3 sm:hidden">
+        <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200/80 mt-2 sm:hidden">
           <button
             type="button"
             onClick={() => setActiveMobileView('list')}
@@ -706,7 +693,7 @@ export function StudentsTab({
               </div>
 
               <p className="text-xs text-slate-500 leading-relaxed mb-3">
-                e-Okul'dan aldığınız Excel (XML), XLS, CSV veya metin formatındaki kütük listelerini doğrudan aktarabilirsiniz.
+                e-Okul'dan aldığınız Excel (XML), XLS, CSV veya metin formatındaki öğrenci listelerini doğrudan aktarabilirsiniz.
               </p>
 
               {/* Optional Class & Section override */}
@@ -761,7 +748,7 @@ export function StudentsTab({
                 </div>
 
                 <div className="mt-2 text-[10px] font-medium text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <span>✓</span> e-Okul kütük şablonu tam uyumlu
+                  <span>✓</span> e-Okul listeleri ile tam uyumlu
                 </div>
 
                 <input

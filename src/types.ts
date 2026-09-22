@@ -59,6 +59,9 @@ export interface EvaluatedScore {
     net: number;
     lgsScore: number;
     percentile: number;
+    tytScore?: number;
+    aytScore?: number;
+    examType?: 'lgs' | 'tyt' | 'ayt' | 'standard';
   };
   subjectScores: {
     [subjectId: number]: SubjectScore;

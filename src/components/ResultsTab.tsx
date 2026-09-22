@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Exam, ExamResult, EvaluatedScore, Student } from '../types';
 import { Icons } from './Icons';
-import { OPTS_4, OPTS_5, calculateScore, exportToCSV, isLgsExam } from '../constants';
+import { OPTS_4, OPTS_5, calculateScore, exportToCSV, isLgsExam, isTytExam, isAytExam } from '../constants';
 
 interface StudentReportModalProps {
   student: ExamResult & { scores: EvaluatedScore };
@@ -12,6 +12,8 @@ interface StudentReportModalProps {
 export function StudentReportModal({ student, exam, onClose }: StudentReportModalProps) {
   const key = exam.keys[student.booklet] || exam.keys["A"];
   const isLgs = isLgsExam(exam);
+  const isTyt = isTytExam(exam);
+  const isAyt = isAytExam(exam);
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
@@ -60,7 +62,7 @@ export function StudentReportModal({ student, exam, onClose }: StudentReportModa
         <div class="sum-box"><div class="sum-title">Toplam Yanlış</div><div class="sum-val" style="color: #dc2626">${student.scores.total.wrong}</div></div>
         <div class="sum-box"><div class="sum-title">Toplam Boş</div><div class="sum-val" style="color: #64748b">${student.scores.total.empty}</div></div>
         <div class="sum-box" style="background:#eff6ff; border-color:#bfdbfe;"><div class="sum-title" style="color:#1d4ed8;">Toplam Net</div><div class="sum-val" style="color: #1d4ed8">${student.scores.total.net.toFixed(2).replace('.', ',')}</div></div>
-        ${isLgs ? `<div class="sum-box" style="background:#fdf4ff; border-color:#c084fc;"><div class="sum-title" style="color:#7e22ce;">PUAN (LGS 2026)</div><div class="sum-val" style="color: #7e22ce">${student.scores.total.lgsScore.toFixed(2).replace('.', ',')}</div></div><div class="sum-box" style="background:#faf5ff; border-color:#e879f9;"><div class="sum-title" style="color:#a21caf;">DİLİM (Genel)</div><div class="sum-val" style="color: #a21caf">%${student.scores.total.percentile.toFixed(2).replace('.', ',')}</div></div>` : ''}
+        ${isLgs ? `<div class="sum-box" style="background:#fdf4ff; border-color:#c084fc;"><div class="sum-title" style="color:#7e22ce;">PUAN (LGS 2026)</div><div class="sum-val" style="color: #7e22ce">${student.scores.total.lgsScore.toFixed(2).replace('.', ',')}</div></div><div class="sum-box" style="background:#faf5ff; border-color:#e879f9;"><div class="sum-title" style="color:#a21caf;">DİLİM (Genel)</div><div class="sum-val" style="color: #a21caf">%${student.scores.total.percentile.toFixed(2).replace('.', ',')}</div></div>` : isTyt ? `<div class="sum-box" style="background:#eff6ff; border-color:#93c5fd;"><div class="sum-title" style="color:#1d4ed8;">TYT PUANI</div><div class="sum-val" style="color: #1d4ed8">${(student.scores.total.tytScore ?? student.scores.total.lgsScore).toFixed(2).replace('.', ',')}</div></div>` : isAyt ? `<div class="sum-box" style="background:#f0fdf4; border-color:#86efac;"><div class="sum-title" style="color:#15803d;">AYT PUANI</div><div class="sum-val" style="color: #15803d">${(student.scores.total.aytScore ?? student.scores.total.lgsScore).toFixed(2).replace('.', ',')}</div></div>` : ''}
       </div>
       <div class="grid">
     `;
@@ -93,6 +95,10 @@ export function StudentReportModal({ student, exam, onClose }: StudentReportModa
     if (isLgs) {
       csv += `PUAN;${student.scores.total.lgsScore.toFixed(2).replace('.', ',')}\n`;
       csv += `DİLİM;%${student.scores.total.percentile.toFixed(2).replace('.', ',')}\n`;
+    } else if (isTyt) {
+      csv += `TYT_PUAN;${(student.scores.total.tytScore ?? student.scores.total.lgsScore).toFixed(2).replace('.', ',')}\n`;
+    } else if (isAyt) {
+      csv += `AYT_PUAN;${(student.scores.total.aytScore ?? student.scores.total.lgsScore).toFixed(2).replace('.', ',')}\n`;
     }
     csv += `\n`;
     csv += "Ders;Soru No;Dogru Cevap;Ogrenci Cevabi;Durum\n";
@@ -164,7 +170,7 @@ export function StudentReportModal({ student, exam, onClose }: StudentReportModa
           </div>
 
           {/* Quick Metric Bubbles */}
-          <div className={`grid gap-2 text-center ${exam.format === 'mebi' ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6' : 'grid-cols-2 sm:grid-cols-4'}`}>
+          <div className={`grid gap-2 text-center ${isLgs ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6' : (isTyt || isAyt) ? 'grid-cols-2 sm:grid-cols-5' : 'grid-cols-2 sm:grid-cols-4'}`}>
             <div className="bg-emerald-50/80 border border-emerald-200 p-2.5 sm:p-3 rounded-xl shadow-2xs">
               <div className="text-[10px] text-emerald-700 font-bold uppercase mb-0.5">Doğru</div>
               <div className="text-xl sm:text-2xl font-black text-emerald-700">{student.scores.total.correct}</div>
@@ -181,7 +187,7 @@ export function StudentReportModal({ student, exam, onClose }: StudentReportModa
               <div className="text-[10px] text-blue-700 font-bold uppercase mb-0.5">Genel Net</div>
               <div className="text-xl sm:text-2xl font-black text-blue-700">{student.scores.total.net.toFixed(2).replace('.', ',')}</div>
             </div>
-            {isLgs && (
+            {isLgs ? (
               <>
                 <div className="bg-purple-50/80 border border-purple-200 p-2.5 sm:p-3 rounded-xl shadow-2xs">
                   <div className="text-[10px] text-purple-700 font-bold uppercase mb-0.5">PUAN (LGS 2026)</div>
@@ -192,7 +198,17 @@ export function StudentReportModal({ student, exam, onClose }: StudentReportModa
                   <div className="text-xl sm:text-2xl font-black text-fuchsia-700">%{student.scores.total.percentile.toFixed(2).replace('.', ',')}</div>
                 </div>
               </>
-            )}
+            ) : isTyt ? (
+              <div className="bg-indigo-50/80 border border-indigo-200 p-2.5 sm:p-3 rounded-xl shadow-2xs col-span-2 sm:col-span-1">
+                <div className="text-[10px] text-indigo-700 font-bold uppercase mb-0.5">TYT PUANI (ÖSYM)</div>
+                <div className="text-xl sm:text-2xl font-black text-indigo-700">{(student.scores.total.tytScore ?? student.scores.total.lgsScore).toFixed(2).replace('.', ',')}</div>
+              </div>
+            ) : isAyt ? (
+              <div className="bg-emerald-50/80 border border-emerald-200 p-2.5 sm:p-3 rounded-xl shadow-2xs col-span-2 sm:col-span-1">
+                <div className="text-[10px] text-emerald-700 font-bold uppercase mb-0.5">AYT PUANI (ÖSYM)</div>
+                <div className="text-xl sm:text-2xl font-black text-emerald-700">{(student.scores.total.aytScore ?? student.scores.total.lgsScore).toFixed(2).replace('.', ',')}</div>
+              </div>
+            ) : null}
           </div>
 
           {/* Subject Breakdown Cards */}
@@ -458,6 +474,8 @@ export function ResultsTab({ exam, updateExam, schoolStudents, showAlert, showCo
   const [activeResultView, setActiveResultView] = useState<'results' | 'absent'>('results');
 
   const isLgs = isLgsExam(exam);
+  const isTyt = isTytExam(exam);
+  const isAyt = isAytExam(exam);
 
   // Mobile layout view: 'cards' | 'table' (default to cards for great mobile UX, or table for dense view)
   const [mobileDisplayMode, setMobileDisplayMode] = useState<'cards' | 'table'>('cards');
@@ -1227,7 +1245,7 @@ export function ResultsTab({ exam, updateExam, schoolStudents, showAlert, showCo
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Merkezi okul kütüğünüzde kayıtlı olan ancak bu sınav için henüz optik formu okunmamış öğrencilerdir.
+                Öğrenci listenizde kayıtlı olan ancak bu sınav için henüz optik formu okunmamış öğrencilerdir.
               </p>
             </div>
 
@@ -1288,7 +1306,7 @@ export function ResultsTab({ exam, updateExam, schoolStudents, showAlert, showCo
               <p className="text-xs text-slate-500 max-w-md">
                 {selectedClassFilter !== "ALL"
                   ? `${selectedClassFilter} şubesinde optik formu taranmayan eksik öğrenci bulunmamaktadır.`
-                  : "Okul kütüğünüzdeki tüm öğrencilerin optik formları başarıyla taranmıştır."}
+                  : "Öğrenci listenizdeki tüm öğrencilerin optik formları başarıyla taranmıştır."}
               </p>
             </div>
           ) : (
@@ -1397,7 +1415,7 @@ export function ResultsTab({ exam, updateExam, schoolStudents, showAlert, showCo
 
                 {/* Score Summary Grid in Card */}
                 <div className={`grid gap-2 text-center bg-slate-50/80 p-2 rounded-xl border border-slate-100 ${
-                  isLgs ? 'grid-cols-3 sm:grid-cols-6' : 'grid-cols-4'
+                  isLgs ? 'grid-cols-3 sm:grid-cols-6' : (isTyt || isAyt) ? 'grid-cols-2 sm:grid-cols-5' : 'grid-cols-4'
                 }`}>
                   <div>
                     <span className="text-[10px] font-bold text-emerald-600 block">Doğru</span>
@@ -1415,7 +1433,7 @@ export function ResultsTab({ exam, updateExam, schoolStudents, showAlert, showCo
                     <span className="text-[10px] font-bold text-blue-600 block">Net</span>
                     <span className="text-sm font-black text-blue-700">{student.scores.total.net.toFixed(2).replace('.', ',')}</span>
                   </div>
-                  {isLgs && (
+                  {isLgs ? (
                     <>
                       <div className="bg-fuchsia-50/90 rounded-lg py-0.5 border border-fuchsia-200">
                         <span className="text-[10px] font-black text-fuchsia-700 block">PUAN</span>
@@ -1426,7 +1444,17 @@ export function ResultsTab({ exam, updateExam, schoolStudents, showAlert, showCo
                         <span className="text-sm font-black font-mono text-purple-800">%{student.scores.total.percentile.toFixed(2).replace('.', ',')}</span>
                       </div>
                     </>
-                  )}
+                  ) : isTyt ? (
+                    <div className="bg-indigo-50/90 rounded-lg py-0.5 border border-indigo-200 col-span-2 sm:col-span-1">
+                      <span className="text-[10px] font-black text-indigo-700 block">TYT PUANI</span>
+                      <span className="text-sm font-black font-mono text-indigo-800">{(student.scores.total.tytScore ?? student.scores.total.lgsScore).toFixed(2).replace('.', ',')}</span>
+                    </div>
+                  ) : isAyt ? (
+                    <div className="bg-emerald-50/90 rounded-lg py-0.5 border border-emerald-200 col-span-2 sm:col-span-1">
+                      <span className="text-[10px] font-black text-emerald-700 block">AYT PUANI</span>
+                      <span className="text-sm font-black font-mono text-emerald-800">{(student.scores.total.aytScore ?? student.scores.total.lgsScore).toFixed(2).replace('.', ',')}</span>
+                    </div>
+                  ) : null}
                 </div>
 
                 {/* Subject breakdown pill bars */}
@@ -1477,7 +1505,7 @@ export function ResultsTab({ exam, updateExam, schoolStudents, showAlert, showCo
                         {sub.name}
                       </th>
                     ))}
-                    <th colSpan={isLgs ? 6 : 4} className="p-2 border-b border-slate-700 text-center bg-indigo-900">
+                    <th colSpan={isLgs ? 6 : (isTyt || isAyt) ? 5 : 4} className="p-2 border-b border-slate-700 text-center bg-indigo-900">
                       GENEL TOPLAM
                     </th>
                     <th rowSpan={2} className="p-2.5 border-b border-slate-700 text-center sticky right-0 bg-slate-900 z-20">
@@ -1496,12 +1524,16 @@ export function ResultsTab({ exam, updateExam, schoolStudents, showAlert, showCo
                     <th className="p-1.5 border-b border-slate-700 text-center bg-indigo-900 text-rose-300 font-mono">Y</th>
                     <th className="p-1.5 border-b border-slate-700 text-center bg-indigo-900 text-slate-300 font-mono">B</th>
                     <th className="p-1.5 border-b border-slate-700 text-center bg-indigo-900 text-white font-black font-mono">NET</th>
-                    {isLgs && (
+                    {isLgs ? (
                       <>
                         <th className="p-1.5 border-b border-slate-700 text-center bg-fuchsia-950 text-fuchsia-200 font-black tracking-wide">PUAN</th>
                         <th className="p-1.5 border-b border-slate-700 text-center bg-purple-950 text-purple-200 font-black tracking-wide">DİLİM</th>
                       </>
-                    )}
+                    ) : isTyt ? (
+                      <th className="p-1.5 border-b border-slate-700 text-center bg-indigo-950 text-indigo-200 font-black tracking-wide">TYT PUAN</th>
+                    ) : isAyt ? (
+                      <th className="p-1.5 border-b border-slate-700 text-center bg-emerald-950 text-emerald-200 font-black tracking-wide">AYT PUAN</th>
+                    ) : null}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1539,7 +1571,7 @@ export function ResultsTab({ exam, updateExam, schoolStudents, showAlert, showCo
                       <td className="p-2 text-center text-blue-700 font-black font-mono text-sm bg-blue-50/50">
                         {student.scores.total.net.toFixed(2).replace('.', ',')}
                       </td>
-                      {isLgs && (
+                      {isLgs ? (
                         <>
                           <td className="p-2 text-center text-fuchsia-700 font-black bg-fuchsia-50/60 font-mono border-l border-fuchsia-100">
                             <span className="px-2 py-0.5 rounded-md bg-fuchsia-100/90 text-fuchsia-900 border border-fuchsia-200 font-black">
@@ -1552,7 +1584,19 @@ export function ResultsTab({ exam, updateExam, schoolStudents, showAlert, showCo
                             </span>
                           </td>
                         </>
-                      )}
+                      ) : isTyt ? (
+                        <td className="p-2 text-center text-indigo-700 font-black bg-indigo-50/60 font-mono border-l border-indigo-100">
+                          <span className="px-2 py-0.5 rounded-md bg-indigo-100/90 text-indigo-900 border border-indigo-200 font-black">
+                            {(student.scores.total.tytScore ?? student.scores.total.lgsScore).toFixed(2).replace('.', ',')}
+                          </span>
+                        </td>
+                      ) : isAyt ? (
+                        <td className="p-2 text-center text-emerald-700 font-black bg-emerald-50/60 font-mono border-l border-emerald-100">
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-100/90 text-emerald-900 border border-emerald-200 font-black">
+                            {(student.scores.total.aytScore ?? student.scores.total.lgsScore).toFixed(2).replace('.', ',')}
+                          </span>
+                        </td>
+                      ) : null}
                       <td className="p-2 text-center sticky right-0 bg-white/95 backdrop-blur-xs border-l border-slate-100 shadow-2xs">
                         <div className="flex justify-center gap-1">
                           <button

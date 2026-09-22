@@ -278,10 +278,10 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
               setDetectedQrCode(qrRes);
               if (qrRes.includes('N:')) {
                 scannedFormatRef.current = 'mebi';
-                if (expectedFormat === 'auto') setStatus(`✅ Kişiye Özel Form (MEBİ) Algılandı`);
+                if (expectedFormat === 'auto') setStatus(`✅ Öğrenciye Özel Karekodlu Form Algılandı`);
               } else {
-                scannedFormatRef.current = 'standard';
-                if (expectedFormat === 'auto') setStatus(`✅ Boş Form Algılandı`);
+                scannedFormatRef.current = 'mebi';
+                if (expectedFormat === 'auto') setStatus(`✅ Karekodlu Form Algılandı`);
               }
             }
           }
@@ -1111,7 +1111,7 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
 
         if (qrDataObj && qrDataObj.N) {
           finalNo = qrDataObj.N;
-          finalBk = qrDataObj.B || "A";
+          finalBk = "A"; // Kitapçık optik form üzerindeki işaretlemeden okunur, işaretlenmemişse varsayılan "A" kabul edilir
           if (exam.studentList) {
             const matchedStudent = exam.studentList.find(s => parseInt(s.no, 10) === parseInt(finalNo, 10));
             if (matchedStudent) {
@@ -1125,6 +1125,9 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
         if (activeFormat === 'mebi') {
           if (mebiCodedBk) {
             finalBk = mebiCodedBk;
+          } else {
+            // Canlı taramada kitapçık türü işaretlenmemiş optikleri okurken varsayılan A kitapçığı olarak kabul edilir
+            finalBk = "A";
           }
         } else {
           const cleanNo = parsedInfo.no.replace(/\s+/g, "");
@@ -1142,6 +1145,7 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
             finalName = bubbleName;
             cleanCls = bubbleCls;
             cleanSec = bubbleSec;
+            // İşaretlenmemiş optiklerde varsayılan A kitapçığı kabul edilir
             finalBk = bubbleBk.length > 0 ? bubbleBk : "A";
 
             const effectiveList = (schoolStudents && schoolStudents.length > 0) ? schoolStudents : (exam.studentList || []);
@@ -1157,7 +1161,8 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
               }
             }
           } else {
-            if (bubbleBk.length > 0) finalBk = bubbleBk;
+            // Kitapçık işaretlenmişse onu kullan, işaretlenmemişse varsayılan "A"
+            finalBk = bubbleBk.length > 0 ? bubbleBk : "A";
             if (cleanCls === "-") cleanCls = bubbleCls;
           }
         }
@@ -1253,25 +1258,25 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
   return (
     <div className="bg-slate-900 rounded-none md:rounded-2xl shadow-xl border-0 md:border border-slate-800 overflow-hidden h-full flex flex-col text-white relative">
       {/* Top Header Bar */}
-      <div className="bg-slate-900/90 backdrop-blur-md px-4 py-3.5 flex flex-wrap justify-between items-center gap-2 border-b border-slate-800 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-emerald-900/30">
+      <div className="bg-slate-900/90 backdrop-blur-md px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-2 border-b border-slate-800 shrink-0">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-emerald-900/30 shrink-0">
             <Icons.Camera />
           </div>
-          <div>
-            <h3 className="text-base font-bold tracking-tight text-white flex items-center gap-2">
+          <div className="min-w-0">
+            <h3 className="text-sm sm:text-base font-bold tracking-tight text-white flex items-center gap-2 truncate">
               Akıllı Optik Tarayıcı
             </h3>
-            <p className="text-slate-400 text-xs hidden sm:block">
+            <p className="text-slate-400 text-[11px] sm:text-xs hidden sm:block truncate">
               Yapay zeka ve optik hizalama ile ultra hızlı okuma
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/90 border border-slate-700/80 rounded-lg text-xs font-semibold text-slate-300">
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-slate-800/90 border border-slate-700/80 rounded-xl text-xs font-semibold text-slate-300">
             <Icons.CheckCircle />
-            <span><strong className="text-emerald-400">{exam.results.length}</strong> Okundu</span>
+            <span><strong className="text-emerald-400 font-mono">{exam.results.length}</strong> Okundu</span>
           </div>
 
           {imageLoaded && !isCameraActive && (
@@ -1283,8 +1288,8 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
                 setBatchFiles([]);
                 setStatus("");
               }}
-              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg text-xs transition-colors border border-slate-700"
-              title="Temizle"
+              className="px-2.5 py-1 sm:py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs transition-colors border border-slate-700 cursor-pointer font-medium"
+              title="Formu Temizle"
             >
               Temizle
             </button>
@@ -1295,97 +1300,66 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
       {/* Main Layout Area */}
       <div className="flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden relative bg-slate-950">
         {/* Left Control Panel */}
-        <div className="w-full lg:w-96 flex flex-col gap-3.5 p-3.5 md:p-5 lg:border-r border-slate-800 shrink-0 overflow-y-auto custom-scrollbar">
-          {/* Format Selector (Segmented Control) */}
-          <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800/90 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                Optik Form Formatı
-              </label>
-              <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
-                {expectedFormat === 'auto' ? 'Otomatik' : expectedFormat === 'standard' ? 'Standart' : 'MEBİ'}
+        <div className="w-full lg:w-96 flex flex-col gap-3 p-3 sm:p-4 lg:border-r border-slate-800 shrink-0 overflow-y-auto custom-scrollbar">
+          {/* Format Selector Badge */}
+          <div className="bg-slate-900/70 p-2.5 sm:p-3 rounded-xl border border-slate-800/80 flex items-center justify-between">
+            <div className="min-w-0">
+              <span className="text-[11px] font-bold text-slate-300 block truncate">
+                Optik Form Algılama
+              </span>
+              <span className="text-[10px] text-slate-400 block truncate">
+                Karekod otomatik taranır ve eşleşir
               </span>
             </div>
-
-            <div className="grid grid-cols-3 gap-1 bg-slate-950/70 p-1 rounded-lg border border-slate-800">
-              <button
-                type="button"
-                onClick={() => setExpectedFormat('auto')}
-                className={`py-1.5 px-2 text-xs font-bold rounded-md transition-all text-center ${
-                  expectedFormat === 'auto'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-              >
-                ✨ Otomatik
-              </button>
-              <button
-                type="button"
-                onClick={() => setExpectedFormat('standard')}
-                className={`py-1.5 px-2 text-xs font-bold rounded-md transition-all text-center ${
-                  expectedFormat === 'standard'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-              >
-                📄 Standart
-              </button>
-              <button
-                type="button"
-                onClick={() => setExpectedFormat('mebi')}
-                className={`py-1.5 px-2 text-xs font-bold rounded-md transition-all text-center ${
-                  expectedFormat === 'mebi'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                }`}
-              >
-                👤 MEBİ
-              </button>
-            </div>
+            <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2.5 py-1 rounded-lg border border-emerald-700/50 flex items-center gap-1.5 shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Karekodlu
+            </span>
           </div>
 
           {/* Primary Action Buttons */}
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {/* Live Camera Button */}
             <button
+              type="button"
               onClick={() => startCamera('environment')}
               disabled={isProcessing}
-              className={`w-full relative overflow-hidden group p-4 rounded-xl font-bold transition-all text-left flex items-center justify-between shadow-lg cursor-pointer ${
+              className={`w-full group px-4 py-3.5 sm:py-4 rounded-xl font-bold transition-all text-left flex items-center justify-between shadow-lg cursor-pointer ${
                 isProcessing
                   ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
                   : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-950/40 active:scale-[0.99] border border-emerald-400/30'
               }`}
             >
-              <div className="flex items-center gap-3.5 z-10">
-                <div className="w-11 h-11 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform">
                   <Icons.Video />
                 </div>
-                <div>
-                  <div className="text-base font-bold leading-tight">Canlı Kamerayı Aç</div>
-                  <div className="text-xs text-emerald-100/80 font-normal mt-0.5">
-                    Otomatik odaklanma & seri tarama
+                <div className="min-w-0">
+                  <div className="text-sm sm:text-base font-bold leading-tight">Canlı Kamerayı Aç</div>
+                  <div className="text-[11px] sm:text-xs text-emerald-100/80 font-normal mt-0.5 truncate">
+                    Otomatik odaklama & anında tarama
                   </div>
                 </div>
               </div>
-              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
-                <Icons.ChevronDown />
-              </div>
+              <span className="px-2.5 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-bold text-white shrink-0 transition-colors">
+                Başlat
+              </span>
             </button>
 
-            {/* File or PDF Upload */}
+            {/* File or PDF Upload & Native System Camera */}
             <div className="grid grid-cols-2 gap-2">
               <label
-                className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center font-bold text-xs transition-all cursor-pointer ${
+                className={`flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-xl border text-center font-bold text-xs transition-all cursor-pointer ${
                   isProcessing
                     ? 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'
                     : 'bg-slate-900/80 hover:bg-slate-800 text-slate-200 border-slate-700/80 hover:border-slate-600 active:scale-[0.98]'
                 }`}
               >
-                <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center mb-1.5">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center mb-1">
                   <Icons.Upload />
                 </div>
-                <span>Dosya / PDF Yükle</span>
-                <span className="text-[10px] text-slate-400 font-normal mt-0.5">Çoklu veya PDF</span>
+                <span className="text-[11px] sm:text-xs">Dosya / PDF</span>
+                <span className="text-[9px] sm:text-[10px] text-slate-400 font-normal">Görsel veya PDF</span>
                 <input
                   type="file"
                   multiple
@@ -1396,24 +1370,23 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
                 />
               </label>
 
-              {/* Native System Camera */}
               <button
                 type="button"
                 onClick={() => {
                   if (nativeCameraRef.current) nativeCameraRef.current.click();
                 }}
                 disabled={isProcessing}
-                className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center font-bold text-xs transition-all cursor-pointer ${
+                className={`flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-xl border text-center font-bold text-xs transition-all cursor-pointer ${
                   isProcessing
                     ? 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'
                     : 'bg-slate-900/80 hover:bg-slate-800 text-slate-200 border-slate-700/80 hover:border-slate-600 active:scale-[0.98]'
                 }`}
               >
-                <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center mb-1.5">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center mb-1">
                   <Icons.Smartphone />
                 </div>
-                <span>Sistem Kamerası</span>
-                <span className="text-[10px] text-slate-400 font-normal mt-0.5">Yedek Kamera</span>
+                <span className="text-[11px] sm:text-xs">Cihaz Kamerası</span>
+                <span className="text-[9px] sm:text-[10px] text-slate-400 font-normal">Tek Çekim</span>
                 <input
                   type="file"
                   accept="image/*"
@@ -1425,8 +1398,8 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
               </button>
             </div>
 
-            {/* Quick Auto-save toggle */}
-            <div className="flex items-center justify-between px-3 py-2 bg-slate-900/60 rounded-lg border border-slate-800/80">
+            {/* Auto-save toggle */}
+            <div className="flex items-center justify-between px-3 py-2 bg-slate-900/60 rounded-xl border border-slate-800/80">
               <label htmlFor="autoSaveToggle" className="text-xs text-slate-300 font-medium cursor-pointer select-none">
                 Tekli fotoğrafları otomatik kaydet
               </label>
@@ -1435,24 +1408,24 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
                 id="autoSaveToggle"
                 checked={autoSaveSingle}
                 onChange={e => setAutoSaveSingle(e.target.checked)}
-                className="w-4 h-4 text-blue-600 bg-slate-800 border-slate-600 rounded cursor-pointer accent-blue-600"
+                className="w-4 h-4 text-emerald-600 bg-slate-800 border-slate-600 rounded cursor-pointer accent-emerald-500"
               />
             </div>
           </div>
 
           {/* Batch Status Progress */}
           {isProcessing && !isCameraActive && (
-            <div className="bg-slate-900/90 p-3.5 rounded-xl border border-blue-500/30 space-y-2 text-left shadow-md">
+            <div className="bg-slate-900/90 p-3 rounded-xl border border-blue-500/30 space-y-2 text-left shadow-md">
               <div className="flex justify-between text-xs font-bold text-blue-400">
                 <span className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
-                  Toplu İşlem Devam Ediyor
+                  Toplu İşlem Sürüyor
                 </span>
                 <span>{batchIndex + 1} / {batchFiles.length || 1}</span>
               </div>
-              <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
+              <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden border border-slate-700">
                 <div
-                  className="bg-gradient-to-r from-blue-500 to-indigo-500 h-2 rounded-full transition-all duration-300"
+                  className="bg-gradient-to-r from-blue-500 to-indigo-500 h-1.5 rounded-full transition-all duration-300"
                   style={{ width: `${((batchIndex + 1) / (batchFiles.length || 1)) * 100}%` }}
                 />
               </div>
@@ -1461,7 +1434,7 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
 
           {/* Status Message */}
           {status && !isCameraActive && (
-            <div className="text-emerald-300 text-xs font-semibold bg-emerald-950/40 p-3 rounded-xl border border-emerald-500/30 flex items-start gap-2 shadow-sm">
+            <div className="text-emerald-300 text-xs font-semibold bg-emerald-950/40 p-2.5 sm:p-3 rounded-xl border border-emerald-500/30 flex items-start gap-2 shadow-sm">
               <span className="text-emerald-400 shrink-0 mt-0.5">ℹ️</span>
               <span className="leading-snug">{status}</span>
             </div>
@@ -1469,15 +1442,16 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
 
           {/* Image Alignment & Rotation Controls (When an image is loaded) */}
           {imageLoaded && !isCameraActive && (
-            <div className="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800 space-y-3 shadow-md">
+            <div className="bg-slate-900/90 p-3 sm:p-3.5 rounded-xl border border-slate-800 space-y-2.5 shadow-md">
               <div className="flex items-center justify-between">
                 <h4 className="font-bold text-white text-xs flex items-center gap-1.5">
                   <Icons.Sliders />
-                  Açı & Hizalama Ayarı
+                  Hizalama & Açı
                 </h4>
                 <button
+                  type="button"
                   onClick={handleAutoAlign}
-                  className="text-[11px] font-bold text-indigo-300 hover:text-white bg-indigo-950/60 hover:bg-indigo-900/60 px-2.5 py-1 rounded-md border border-indigo-700/40 transition-colors flex items-center gap-1 cursor-pointer"
+                  className="text-[11px] font-bold text-indigo-300 hover:text-white bg-indigo-950/60 hover:bg-indigo-900/60 px-2 py-0.5 rounded-lg border border-indigo-700/40 transition-colors flex items-center gap-1 cursor-pointer"
                 >
                   <Icons.Sparkles /> Otomatik Düzelt
                 </button>
@@ -1488,7 +1462,7 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
                 <button
                   type="button"
                   onClick={() => { setRotation90(prev => prev - 90); setAnchors(null); setIsProcessing(true); }}
-                  className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2 rounded-lg transition-colors text-xs border border-slate-700 active:scale-95 cursor-pointer"
+                  className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-1.5 rounded-lg transition-colors text-xs border border-slate-700 active:scale-95 cursor-pointer"
                 >
                   <Icons.RotateCcw />
                   <span>Sola 90°</span>
@@ -1496,7 +1470,7 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
                 <button
                   type="button"
                   onClick={() => { setRotation90(prev => prev + 90); setAnchors(null); setIsProcessing(true); }}
-                  className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2 rounded-lg transition-colors text-xs border border-slate-700 active:scale-95 cursor-pointer"
+                  className="flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-1.5 rounded-lg transition-colors text-xs border border-slate-700 active:scale-95 cursor-pointer"
                 >
                   <Icons.RotateCw />
                   <span>Sağa 90°</span>
@@ -1504,16 +1478,16 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
               </div>
 
               {/* Fine Angle Slider */}
-              <div className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80">
-                <div className="flex justify-between items-center text-[10px] text-slate-400 mb-1.5 font-bold">
+              <div className="bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
+                <div className="flex justify-between items-center text-[10px] text-slate-400 mb-1 font-bold">
                   <span>İnce Açı</span>
-                  <span className="text-blue-400 font-mono text-xs px-1.5 py-0.5 bg-blue-950/60 rounded border border-blue-800/40">
+                  <span className="text-blue-400 font-mono text-xs px-1.5 py-0.2 bg-blue-950/60 rounded border border-blue-800/40">
                     {fineAngle > 0 ? `+${fineAngle}` : fineAngle}°
                   </span>
                   <button
                     type="button"
                     onClick={() => { setFineAngle(0); setAnchors(null); setIsProcessing(true); }}
-                    className="text-slate-400 hover:text-white text-[10px]"
+                    className="text-slate-400 hover:text-white text-[10px] cursor-pointer"
                   >
                     Sıfırla
                   </button>
@@ -1532,8 +1506,9 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
               {/* Manual Confirmation Button */}
               {!isProcessing && !autoMode && (
                 <button
+                  type="button"
                   onClick={() => readForm(anchors)}
-                  className="w-full bg-blue-600 hover:bg-blue-500 active:scale-[0.99] text-white font-bold py-2.5 rounded-xl shadow-lg shadow-blue-900/30 transition-all text-sm flex items-center justify-center gap-2 cursor-pointer border border-blue-400/30"
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white font-bold py-2.5 rounded-xl shadow-lg shadow-emerald-950/40 transition-all text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer border border-emerald-400/30"
                 >
                   <Icons.CheckCircle />
                   <span>ONAYLA VE FORMU OKU</span>
@@ -1543,18 +1518,18 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
           )}
 
           {/* Quick Guidance Info */}
-          <div className="mt-auto pt-2 border-t border-slate-800/60 text-[11px] text-slate-400 space-y-1.5">
+          <div className="mt-auto pt-2 border-t border-slate-800/60 text-[11px] text-slate-400 space-y-1">
             <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
               <Icons.Sparkles /> İpuçları
             </div>
-            <p className="leading-relaxed">
-              Formu düz bir zemine koyun ve 4 siyah köşe karesinin kamerada net görünmesini sağlayın.
+            <p className="leading-relaxed text-[10px] sm:text-[11px]">
+              Optik formu düz bir zemine koyun ve 4 siyah köşe karesinin kamerada net görünmesini sağlayın.
             </p>
           </div>
         </div>
 
         {/* Right Preview Viewport Area */}
-        <div className="flex-1 bg-slate-950 flex flex-col justify-center items-center relative p-3 md:p-6 min-h-[55vh] lg:min-h-0 overflow-hidden">
+        <div className="flex-1 bg-slate-950 flex flex-col justify-center items-center relative p-3 md:p-6 min-h-[50vh] lg:min-h-0 overflow-hidden">
           {/* Active Image Loaded Stage */}
           {imageLoaded && !isCameraActive ? (
             <div className="relative h-full w-full flex flex-col justify-center items-center">
@@ -1585,21 +1560,22 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
               </div>
             </div>
           ) : (
-            /* Empty State Placeholder */
+            /* Empty State Placeholder (Desktop only to prevent redundant vertical stacking on mobile) */
             !isCameraActive && (
-              <div className="flex flex-col items-center justify-center p-8 text-center max-w-sm">
-                <div className="w-20 h-20 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 mb-4 shadow-inner">
+              <div className="hidden lg:flex flex-col items-center justify-center p-8 text-center max-w-sm">
+                <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 mb-3 shadow-inner">
                   <Icons.Camera />
                 </div>
                 <h4 className="text-base font-bold text-slate-200 mb-1">
                   Taramaya Hazır
                 </h4>
-                <p className="text-xs text-slate-400 leading-relaxed mb-5">
-                  Taramaya başlamak için <strong>Canlı Kamerayı Aç</strong> veya optik form görselini/PDF dosyasını yükleyin.
+                <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                  Optik formları okumak için <strong>Canlı Kamerayı Aç</strong> veya optik form görselini/PDF dosyasını yükleyin.
                 </p>
                 <button
+                  type="button"
                   onClick={() => startCamera('environment')}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-emerald-950/50 transition-all cursor-pointer"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-emerald-950/50 transition-all cursor-pointer"
                 >
                   <Icons.Video /> Canlı Kamerayı Başlat
                 </button>
@@ -1611,14 +1587,7 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
 
       {/* FULLSCREEN CAMERA OVERLAY (When Live Camera is Active) */}
       {isCameraActive && (
-        <div
-          className="fixed inset-0 z-[150] bg-black flex flex-col overflow-hidden select-none cursor-pointer"
-          onClick={(e) => {
-            if (!(e.target as HTMLElement).closest('button') && !isProcessing) {
-              captureImage();
-            }
-          }}
-        >
+        <div className="fixed inset-0 z-[150] bg-black flex flex-col overflow-hidden select-none">
           {/* Hidden Background Video */}
           <video
             ref={videoRef}
@@ -1629,30 +1598,35 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
           />
 
           {/* TOP GLASSMORPHIC HUD */}
-          <div className="fixed top-0 left-0 right-0 z-50 p-3.5 md:p-5 pt-[max(0.875rem,env(safe-area-inset-top))] flex items-center justify-between pointer-events-none">
+          <div className="fixed top-0 left-0 right-0 z-50 p-2.5 sm:p-4 pt-[max(0.75rem,env(safe-area-inset-top))] flex items-center justify-between gap-2 pointer-events-none">
             {/* Status Radar Badge */}
-            <div className="flex items-center gap-2 bg-slate-900/80 backdrop-blur-md border border-white/15 px-3.5 py-1.5 rounded-full shadow-2xl pointer-events-auto">
-              <span className={`w-2.5 h-2.5 rounded-full transition-all ${
+            <div className="flex items-center gap-1.5 sm:gap-2 bg-slate-900/85 backdrop-blur-md border border-white/15 px-3 py-1.5 rounded-full shadow-2xl pointer-events-auto">
+              <span className={`w-2 sm:w-2.5 h-2 sm:h-2.5 rounded-full transition-all shrink-0 ${
                 lockLevel >= 8
                   ? 'bg-emerald-400 shadow-[0_0_10px_#34d399] animate-ping'
                   : lockLevel >= 3
                   ? 'bg-amber-400 shadow-[0_0_8px_#fbbf24] animate-pulse'
                   : 'bg-red-400'
               }`} />
-              <span className="text-xs font-bold text-slate-100">
-                {lockLevel >= 8 ? 'Hedef Kilitlendi 🔒' : lockLevel >= 3 ? 'Odaklanıyor... ⏳' : 'Hizalanıyor...'}
+              <span className="text-[11px] sm:text-xs font-bold text-slate-100 whitespace-nowrap">
+                {lockLevel >= 8 ? 'Hedef Kilitlendi ⚡' : lockLevel >= 3 ? 'Odaklanıyor... ⏳' : 'Hizalanıyor...'}
               </span>
               {detectedQrCode && (
-                <span className="bg-blue-500/30 text-blue-300 border border-blue-400/40 text-[10px] px-2 py-0.5 rounded-full font-black">
+                <span className="bg-blue-500/30 text-blue-300 border border-blue-400/40 text-[9px] px-1.5 py-0.5 rounded-full font-black">
                   MEBİ
                 </span>
               )}
             </div>
 
+            {/* Instruction Floating Pill (At Top, not blocking the center of the sheet!) */}
+            <div className="hidden md:flex items-center bg-slate-950/80 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-full text-xs text-slate-200 font-medium shadow-lg pointer-events-auto">
+              Siyah 4 köşe karesini vizörün köşelerine oturtun
+            </div>
+
             {/* Right Action Icons */}
-            <div className="flex items-center gap-2 pointer-events-auto">
+            <div className="flex items-center gap-1.5 sm:gap-2 pointer-events-auto">
               {/* Form Scanned Counter */}
-              <div className="flex items-center gap-1.5 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs px-3 py-1.5 rounded-full font-bold backdrop-blur-md shadow-lg">
+              <div className="flex items-center gap-1 sm:gap-1.5 bg-emerald-950/85 border border-emerald-500/40 text-emerald-300 text-[11px] sm:text-xs px-2.5 sm:px-3 py-1.5 rounded-full font-bold backdrop-blur-md shadow-lg">
                 <Icons.CheckCircle />
                 <span>{exam.results.length} Form</span>
               </div>
@@ -1662,7 +1636,7 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); toggleTorch(); }}
-                  className={`p-2.5 rounded-full backdrop-blur-md border transition-all cursor-pointer ${
+                  className={`p-2 sm:p-2.5 rounded-full backdrop-blur-md border transition-all cursor-pointer ${
                     isTorchOn
                       ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.7)]'
                       : 'bg-slate-900/80 text-white border-white/15 hover:bg-slate-800'
@@ -1677,7 +1651,7 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); switchCamera(); }}
-                className="p-2.5 rounded-full bg-slate-900/80 hover:bg-slate-800 text-white border border-white/15 backdrop-blur-md transition-colors shadow-lg cursor-pointer"
+                className="p-2 sm:p-2.5 rounded-full bg-slate-900/80 hover:bg-slate-800 text-white border border-white/15 backdrop-blur-md transition-colors shadow-lg cursor-pointer"
                 title="Kamera Değiştir"
               >
                 <Icons.FlipCamera />
@@ -1687,7 +1661,7 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); stopCamera(); }}
-                className="p-2.5 rounded-full bg-red-600/80 hover:bg-red-600 text-white border border-red-400/30 backdrop-blur-md transition-colors shadow-lg cursor-pointer"
+                className="p-2 sm:p-2.5 rounded-full bg-red-600/80 hover:bg-red-600 text-white border border-red-400/30 backdrop-blur-md transition-colors shadow-lg cursor-pointer"
                 title="Kapat"
               >
                 <Icons.X />
@@ -1695,23 +1669,23 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
             </div>
           </div>
 
-          {/* AR GUIDE VİZÖR (Aspect Ratio 210/297 A4 Guide) */}
+          {/* AR GUIDE VİZÖR (Aspect Ratio 210/297 A4 Guide - Unobstructed Clear Viewport) */}
           {!imageLoaded && (
             <div className="relative w-full h-full flex justify-center items-center pointer-events-none">
               <div
                 ref={arGuideRef}
                 className={`relative z-10 transition-all duration-300 rounded-lg ${
                   lockLevel >= 8
-                    ? 'border-[3.5px] border-emerald-400 shadow-[0_0_25px_rgba(52,211,153,0.6)]'
+                    ? 'border-[3px] border-emerald-400 shadow-[0_0_25px_rgba(52,211,153,0.6)]'
                     : lockLevel >= 3
-                    ? 'border-[3px] border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.4)]'
-                    : 'border-[2.5px] border-white/50'
+                    ? 'border-[2.5px] border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.4)]'
+                    : 'border-[2px] border-white/40'
                 }`}
                 style={{
                   width: '94vw',
-                  maxWidth: 'calc(84vh * (210 / 297))',
+                  maxWidth: 'calc(80vh * (210 / 297))',
                   aspectRatio: '210 / 297',
-                  boxShadow: '0 0 0 9999px rgba(0,0,0,0.85)'
+                  boxShadow: '0 0 0 9999px rgba(0,0,0,0.82)'
                 }}
               >
                 {/* Traversing Laser Line */}
@@ -1721,38 +1695,25 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
                 {anchorTargets.map((pos, i) => (
                   <div
                     key={i}
-                    className={`absolute border-[3px] rounded-lg flex items-center justify-center transition-all ${
+                    className={`absolute border-[2.5px] rounded-lg flex items-center justify-center transition-all ${
                       lockLevel >= 8
-                        ? 'border-emerald-400 bg-emerald-400/25 scale-105'
+                        ? 'border-emerald-400 bg-emerald-400/20 scale-105'
                         : lockLevel >= 3
-                        ? 'border-amber-400 bg-amber-400/20'
-                        : 'border-red-500/80 bg-red-500/10'
+                        ? 'border-amber-400 bg-amber-400/15'
+                        : 'border-red-500/70 bg-red-500/10'
                     }`}
                     style={{
                       left: pos.left,
                       top: pos.top,
-                      width: '18%',
-                      height: '12%',
+                      width: '16%',
+                      height: '11%',
                       transform: 'translate(-50%, -50%)'
                     }}
                   >
-                    <div className={`w-[2px] h-4 ${lockLevel >= 8 ? 'bg-emerald-400' : lockLevel >= 3 ? 'bg-amber-400' : 'bg-red-500/60'} absolute`} />
-                    <div className={`h-[2px] w-4 ${lockLevel >= 8 ? 'bg-emerald-400' : lockLevel >= 3 ? 'bg-amber-400' : 'bg-red-500/60'} absolute`} />
+                    <div className={`w-[2px] h-3.5 ${lockLevel >= 8 ? 'bg-emerald-400' : lockLevel >= 3 ? 'bg-amber-400' : 'bg-red-500/60'} absolute`} />
+                    <div className={`h-[2px] w-3.5 ${lockLevel >= 8 ? 'bg-emerald-400' : lockLevel >= 3 ? 'bg-amber-400' : 'bg-red-500/60'} absolute`} />
                   </div>
                 ))}
-
-                {/* Center Helper Badge */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-4">
-                  <div className="bg-slate-950/85 text-white px-4 py-3 rounded-2xl text-xs font-semibold text-center backdrop-blur-md shadow-2xl border border-white/15 max-w-[280px] space-y-1">
-                    <div className="font-bold text-slate-100">Siyah kareleri pencerelere oturtun</div>
-                    <div className="text-slate-300 text-[11px]">Tam yeşil olduğunda sabit bekleyin</div>
-                    {status && (
-                      <div className="text-amber-300 font-bold text-[10px] pt-1 border-t border-white/10 mt-1">
-                        {status}
-                      </div>
-                    )}
-                  </div>
-                </div>
               </div>
             </div>
           )}
@@ -1762,7 +1723,7 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
             <div className="absolute z-20 w-full h-full flex justify-center items-center pointer-events-none bg-black/75">
               <div
                 className="relative border-2 border-emerald-400 shadow-[0_0_30px_rgba(52,211,153,0.5)] rounded-lg overflow-hidden"
-                style={{ width: '94vw', maxWidth: 'calc(84vh * (210 / 297))', aspectRatio: '210 / 297' }}
+                style={{ width: '94vw', maxWidth: 'calc(80vh * (210 / 297))', aspectRatio: '210 / 297' }}
               >
                 <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full object-contain shadow-2xl" />
                 <canvas ref={overlayCanvasRef} className="absolute top-0 left-0 w-full h-full object-contain" />
@@ -1771,7 +1732,7 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
           )}
 
           {/* BOTTOM CONTROLS & MANUAL SHUTTER */}
-          <div className="fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-0 right-0 z-50 flex flex-col items-center gap-2.5 pointer-events-none">
+          <div className="fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] left-0 right-0 z-50 flex flex-col items-center gap-2 pointer-events-none">
             {/* Shutter Button */}
             <div className="flex items-center gap-4 pointer-events-auto">
               <button
@@ -1781,22 +1742,22 @@ export function ReadTab({ exam, updateExam, setActiveTab: _setActiveTab, totalQ,
                   if (!isProcessing) captureImage();
                 }}
                 disabled={isProcessing}
-                className="group relative flex items-center justify-center w-20 h-20 rounded-full border-4 border-white/90 bg-white/20 active:scale-95 transition-transform backdrop-blur-md shadow-2xl cursor-pointer"
+                className="group relative flex items-center justify-center w-18 h-18 sm:w-20 sm:h-20 rounded-full border-4 border-white/90 bg-white/20 active:scale-95 transition-transform backdrop-blur-md shadow-2xl cursor-pointer"
                 title="Fotoğraf Çek ve Oku"
               >
-                <div className="w-14 h-14 rounded-full bg-emerald-500 group-hover:bg-emerald-400 group-active:scale-90 transition-all shadow-inner" />
+                <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-full bg-emerald-500 group-hover:bg-emerald-400 group-active:scale-90 transition-all shadow-inner" />
               </button>
             </div>
 
-            <p className="text-[11px] text-white/80 font-semibold bg-black/60 px-3.5 py-1 rounded-full backdrop-blur-md shadow pointer-events-auto">
-              Otomatik okur veya butona basarak manuel çekin
+            <p className="text-[10px] sm:text-[11px] text-white/90 font-medium bg-black/70 px-3.5 py-1 rounded-full backdrop-blur-md shadow pointer-events-auto">
+              {status ? status : "Sabit tuttuğunuzda otomatik çeker veya butona dokunun"}
             </p>
           </div>
 
           {/* Process Success Message Floating Toast */}
           {status && isProcessing && (
-            <div className="fixed bottom-24 left-0 right-0 flex justify-center z-50 pointer-events-none">
-              <div className="bg-emerald-600 text-white px-6 py-3 rounded-full text-xs md:text-sm font-bold shadow-2xl border-2 border-white flex items-center gap-2 animate-bounce">
+            <div className="fixed bottom-24 left-0 right-0 flex justify-center z-50 pointer-events-none px-4">
+              <div className="bg-emerald-600 text-white px-5 py-2.5 rounded-full text-xs sm:text-sm font-bold shadow-2xl border-2 border-white flex items-center gap-2 animate-bounce">
                 <span>⚡</span>
                 <span>{status}</span>
               </div>

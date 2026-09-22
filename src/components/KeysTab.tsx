@@ -44,17 +44,17 @@ function QuickInput({ valueArray, onChange, maxLength, optionsCount, subjectName
   const filledCount = valueArray.filter(v => v !== "").length;
 
   return (
-    <div className="relative flex items-center w-full sm:w-56">
+    <div className="relative flex items-center w-full sm:w-52">
       <input
         type="text"
         value={localStr}
         onChange={handleChange}
         maxLength={maxLength}
-        placeholder={optionsCount === 4 ? "Örn: ABCD..." : "Örn: ABCDE..."}
-        className="w-full px-3 py-1.5 pr-14 text-xs font-mono tracking-wider bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 uppercase shadow-2xs outline-none transition-all placeholder:font-sans placeholder:normal-case placeholder:text-slate-400 font-semibold"
+        placeholder={optionsCount === 4 ? "Hızlı: ABCD..." : "Hızlı: ABCDE..."}
+        className="w-full pl-3 pr-14 py-1.5 text-xs font-mono tracking-wider bg-white border border-slate-200/90 rounded-lg focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 uppercase shadow-2xs outline-none transition-all placeholder:font-sans placeholder:normal-case placeholder:text-slate-400 font-bold text-slate-800"
         title={`${subjectName} için ardışık cevap tuşlayın (Örn: ABCDDCBA)`}
       />
-      <span className="absolute right-2.5 text-[10px] font-bold text-slate-400 font-mono pointer-events-none">
+      <span className="absolute right-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500 font-mono pointer-events-none border border-slate-200/70">
         {filledCount}/{maxLength}
       </span>
     </div>
@@ -211,18 +211,11 @@ export function KeysTab({ exam, updateExam, totalQ }: KeysTabProps) {
     showToast(`${fromBooklet} kitapçığı ${activeBooklet} kitapçığına kopyalandı.`);
   };
 
-  // Fill pattern for a subject
-  const handlePatternFill = (startIdx: number, count: number, pattern: 'ABCD' | 'clear') => {
+  // Clear keys for a subject
+  const handleClearSubjectKeys = (startIdx: number, count: number) => {
     const newKeys = [...currentKeys];
-    if (pattern === 'clear') {
-      for (let i = 0; i < count; i++) newKeys[startIdx + i] = "";
-      showToast("Ders cevapları temizlendi.");
-    } else if (pattern === 'ABCD') {
-      for (let i = 0; i < count; i++) {
-        newKeys[startIdx + i] = options[i % options.length];
-      }
-      showToast("Dönüşümlü A-B-C-D şablonu uygulandı.");
-    }
+    for (let i = 0; i < count; i++) newKeys[startIdx + i] = "";
+    showToast("Ders cevapları temizlendi.");
     updateExam({ keys: { ...exam.keys, [activeBooklet]: newKeys } });
   };
 
@@ -331,7 +324,7 @@ export function KeysTab({ exam, updateExam, totalQ }: KeysTabProps) {
   };
 
   return (
-    <div className="w-full max-w-5xl mx-auto flex flex-col gap-4 pb-20 select-none">
+    <div className="w-full max-w-6xl mx-auto flex flex-col gap-4 pb-20 select-none">
       {/* Toast Bildirimi */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl border border-slate-700 flex items-center gap-2.5 animate-in slide-in-from-bottom-3 duration-150 text-xs font-semibold">
@@ -341,13 +334,13 @@ export function KeysTab({ exam, updateExam, totalQ }: KeysTabProps) {
       )}
 
       {/* 1. ÜST KONTROL & KİTAPÇIK YÖNETİM PANELİ */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-3.5 sm:p-4 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs px-2.5 py-2 sm:px-4 sm:py-2.5 transition-all flex items-center justify-between gap-2">
         {/* Sol Taraf: Kitapçık Butonları (A - B - C - D) */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider hidden sm:inline">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider hidden md:inline">
             Kitapçık:
           </span>
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-1 border border-slate-200/80">
+          <div className="flex items-center bg-slate-100/90 p-0.5 sm:p-1 rounded-xl gap-0.5 border border-slate-200/80">
             {booklets.map(bk => {
               const bkKeys = exam.keys[bk] || [];
               const bkFilled = bkKeys.filter(k => k !== "").length;
@@ -362,52 +355,61 @@ export function KeysTab({ exam, updateExam, totalQ }: KeysTabProps) {
                     setActiveBooklet(bk);
                     if (focusedQuestionIdx !== null) setFocusedQuestionIdx(0);
                   }}
-                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs transition-all cursor-pointer select-none ${
                     isActive
-                      ? 'bg-white text-blue-700 shadow-xs border border-slate-200'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                      ? 'bg-white text-blue-700 shadow-xs border border-slate-200/90 font-black'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 font-semibold'
                   }`}
+                  title={`${bk} Kitapçığı (${bkFilled}/${totalQ} soru kodlandı)`}
                 >
-                  <span className={`w-2 h-2 rounded-full ${
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                     isBkDone ? 'bg-emerald-500' : bkFilled > 0 ? 'bg-amber-500' : 'bg-slate-300'
                   }`} />
-                  <span>{bk} Kitapçığı</span>
-                  <span className="text-[10px] font-mono text-slate-400 font-normal">
-                    ({bkFilled}/{totalQ})
-                  </span>
+                  <span className="text-xs">{bk}</span>
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* Sağ Taraf: Doluluk Durumu, Seri Mod & Yardımcı Araçlar */}
-        <div className="flex items-center justify-between sm:justify-end gap-2 flex-wrap">
-
+        {/* Sağ Taraf: Doluluk Durumu & Yardımcı Araçlar */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Kompakt Doluluk Göstergesi */}
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200/70">
-            <span>{activeBooklet}:</span>
-            <span className={`font-mono font-bold ${isComplete ? 'text-emerald-600' : 'text-slate-800'}`}>
-              {filledCount}/{totalQ} (%{completionPercentage})
+          <div
+            className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 sm:py-1.5 rounded-xl border transition-colors select-none shrink-0 ${
+              isComplete
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/90'
+                : filledCount > 0
+                ? 'bg-blue-50/70 text-blue-700 border-blue-200/80'
+                : 'bg-slate-50 text-slate-600 border-slate-200/80'
+            }`}
+            title={`${activeBooklet} Kitapçığı: ${filledCount}/${totalQ} soru kodlandı (%${completionPercentage})`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+              isComplete ? 'bg-emerald-500' : filledCount > 0 ? 'bg-blue-500 animate-pulse' : 'bg-slate-300'
+            }`} />
+            <span className="font-mono text-xs">{filledCount}/{totalQ}</span>
+            <span className="text-[10px] opacity-75 font-normal hidden sm:inline">
+              (%{completionPercentage})
             </span>
           </div>
 
           {/* Yardımcı İşlemler Açılır Menüsü */}
-          <div className="relative" ref={toolsMenuRef}>
+          <div className="relative shrink-0" ref={toolsMenuRef}>
             <button
               type="button"
               onClick={() => setShowToolsMenu(!showToolsMenu)}
-              className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl border border-slate-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+              className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl border border-slate-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs select-none"
               title="Ek Araçlar ve İşlemler"
             >
               <Icons.Sliders />
-              <span>İşlemler</span>
-              <span className="text-[10px] text-slate-400">▼</span>
+              <span className="hidden sm:inline">İşlemler</span>
+              <span className="text-[9px] text-slate-400">▼</span>
             </button>
 
             {/* Dropdown Menü */}
             {showToolsMenu && (
-              <div className="absolute right-0 top-full mt-1.5 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-30 animate-in fade-in duration-100 text-xs">
+              <div className="absolute right-0 top-full mt-1.5 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 py-1.5 z-30 animate-in fade-in duration-100 text-xs">
                 <button
                   type="button"
                   onClick={() => {
@@ -456,7 +458,7 @@ export function KeysTab({ exam, updateExam, totalQ }: KeysTabProps) {
                 >
                   <Icons.RotateCcw /> <span>Başka Kitapçıktan Kopyala</span>
                 </button>
-                <div className="my-1.5 border-t border-slate-100" />
+                <div className="my-1 border-t border-slate-100" />
                 <button
                   type="button"
                   onClick={handleClearBooklet}
@@ -544,34 +546,35 @@ export function KeysTab({ exam, updateExam, totalQ }: KeysTabProps) {
                 className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden transition-all"
               >
                 {/* Ders Başlığı */}
-                <div className="px-4 py-3 bg-gradient-to-r from-slate-50 via-slate-50/80 to-blue-50/20 border-b border-slate-200/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 bg-gradient-to-r from-slate-50 via-white to-blue-50/30 border-b border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                   <div
-                    className="flex items-center gap-2.5 cursor-pointer select-none"
+                    className="flex items-center gap-2 cursor-pointer select-none flex-wrap"
                     onClick={() => toggleSubjectCollapse(sub.id)}
                   >
-                    <span className={`text-slate-400 transform transition-transform duration-200 inline-block ${isCollapsed ? '-rotate-90' : 'rotate-0'}`}>
+                    <span className={`w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transform transition-transform duration-200 shrink-0 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`}>
                       <Icons.ChevronDown />
                     </span>
-                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0" />
-                    <h4 className="font-black text-sm text-slate-800 tracking-tight">
+                    <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
+                    <h4 className="font-extrabold text-sm text-slate-900 tracking-tight">
                       {sub.name}
                     </h4>
-                    <span className="text-xs text-slate-400 font-normal">
-                      ({sub.startIdx + 1} - {sub.startIdx + sub.count}. Sorular)
+                    <span className="text-[11px] font-mono font-semibold text-slate-500 bg-slate-100/90 border border-slate-200/80 px-2 py-0.5 rounded-md">
+                      {sub.startIdx + 1} - {sub.startIdx + sub.count}. Sorular
                     </span>
                     {sub.isDone ? (
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/90 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                         ✓ Tamamlandı
                       </span>
                     ) : (
-                      <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md shadow-2xs">
-                        {sub.filledCount}/{sub.count}
+                      <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200/90 px-2 py-0.5 rounded-full shadow-2xs font-mono">
+                        {sub.filledCount}/{sub.count} Kodlandı
                       </span>
                     )}
                   </div>
 
                   {/* Sağ Taraf: Hızlı Tuşlama Kutusu ve Şablon Butonları */}
-                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                  <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
                     <QuickInput
                       valueArray={currentKeys.slice(sub.startIdx, sub.startIdx + sub.count)}
                       maxLength={sub.count}
@@ -589,16 +592,8 @@ export function KeysTab({ exam, updateExam, totalQ }: KeysTabProps) {
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
-                        onClick={() => handlePatternFill(sub.startIdx, sub.count, 'ABCD')}
-                        className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-[10px] font-bold transition-colors cursor-pointer shadow-2xs"
-                        title="Dönüşümlü A-B-C-D şablonu doldur"
-                      >
-                        A-B-C-D
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handlePatternFill(sub.startIdx, sub.count, 'clear')}
-                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                        onClick={() => handleClearSubjectKeys(sub.startIdx, sub.count)}
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-red-200/80 active:scale-95"
                         title="Bu dersin cevaplarını temizle"
                       >
                         <Icons.Trash />
@@ -609,13 +604,18 @@ export function KeysTab({ exam, updateExam, totalQ }: KeysTabProps) {
 
                 {/* Soru Kodlama Izgarası */}
                 {!isCollapsed && (
-                  <div className="p-3.5 bg-white">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                  <div className="p-3 sm:p-4 bg-white">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-3">
                       {chunks.map((chunk, cIdx) => (
                         <div
                           key={cIdx}
-                          className="bg-slate-50/70 p-2.5 rounded-xl border border-slate-200/60 flex flex-col gap-1.5 shadow-2xs"
+                          className="bg-slate-50/70 hover:bg-slate-50/90 p-2 sm:p-2.5 rounded-xl border border-slate-200/70 flex flex-col gap-1.5 shadow-2xs transition-colors min-w-0"
                         >
+                          <div className="flex items-center justify-between px-1 pb-1 border-b border-slate-200/60 text-[10px] font-bold text-slate-400 font-mono">
+                            <span>{chunk[0] + 1} - {chunk[chunk.length - 1] + 1}. Sorular</span>
+                            <span className="text-slate-400/80 font-normal">5'li Blok</span>
+                          </div>
+
                           {chunk.map(lIdx => {
                             const gIdx = sub.startIdx + lIdx;
                             const curVal = currentKeys[gIdx] || "";
@@ -628,23 +628,39 @@ export function KeysTab({ exam, updateExam, totalQ }: KeysTabProps) {
                                 onClick={() => {
                                   if (isKeyboardMode) setFocusedQuestionIdx(gIdx);
                                 }}
-                                className={`flex items-center justify-between p-1.5 rounded-lg transition-all ${
+                                className={`flex items-center justify-between gap-1.5 sm:gap-2 p-1 sm:p-1.5 rounded-xl transition-all border min-w-0 ${
                                   isFocused
-                                    ? 'bg-amber-50 ring-2 ring-amber-400 shadow-xs'
+                                    ? 'bg-amber-50/90 ring-2 ring-amber-400 shadow-xs border-amber-300'
                                     : curVal
-                                    ? 'bg-white shadow-2xs'
-                                    : 'hover:bg-slate-100/70'
+                                    ? 'bg-white shadow-2xs border-slate-200/90'
+                                    : 'bg-white/80 hover:bg-white border-slate-200/60 hover:border-slate-300'
                                 }`}
                               >
-                                {/* Soru No */}
-                                <span className={`w-7 text-right font-mono text-xs font-bold select-none ${
-                                  isFocused ? 'text-amber-700 font-black' : 'text-slate-500'
-                                }`}>
-                                  {String(lIdx + 1).padStart(2, '0')}.
-                                </span>
+                                {/* Soru No Rozeti */}
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <span
+                                    className={`w-6 sm:w-6.5 py-0.5 text-center font-mono text-[11px] sm:text-xs font-black rounded-lg border select-none transition-colors ${
+                                      isFocused
+                                        ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                        : curVal
+                                        ? 'bg-blue-50 text-blue-700 border-blue-200/90 font-black'
+                                        : 'bg-slate-100 text-slate-500 border-slate-200/80'
+                                    }`}
+                                  >
+                                    {String(lIdx + 1).padStart(2, '0')}
+                                  </span>
+                                </div>
 
-                                {/* Şıklar */}
-                                <div className="flex items-center gap-1 sm:gap-1.5">
+                                {/* Şıkları Tam Kapsayan Çerçeve (Enclosing Frame) */}
+                                <div
+                                  className={`flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-xl border transition-all shrink-0 ${
+                                    isFocused
+                                      ? 'bg-amber-100/50 border-amber-200'
+                                      : curVal
+                                      ? 'bg-blue-50/50 border-blue-200/80 shadow-2xs'
+                                      : 'bg-slate-100/80 border-slate-200/80 shadow-2xs'
+                                  }`}
+                                >
                                   {options.map(opt => {
                                     const isSelected = curVal === opt;
                                     return (
@@ -658,16 +674,23 @@ export function KeysTab({ exam, updateExam, totalQ }: KeysTabProps) {
                                             setFocusedQuestionIdx(Math.min(totalQ - 1, gIdx + 1));
                                           }
                                         }}
-                                        className={`w-7.5 h-7.5 rounded-full font-mono font-black text-xs transition-all cursor-pointer flex items-center justify-center select-none active:scale-90 ${
+                                        className={`rounded-full font-mono font-black transition-all cursor-pointer flex items-center justify-center select-none active:scale-90 shrink-0 ${
+                                          exam.optionsCount === 5
+                                            ? 'w-6 h-6 sm:w-6.5 sm:h-6.5 text-[11px]'
+                                            : 'w-6.5 h-6.5 sm:w-7 sm:h-7 text-xs'
+                                        } ${
                                           isSelected
                                             ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-600/30 scale-105'
-                                            : 'bg-white text-slate-700 border border-slate-300 hover:border-blue-400 hover:bg-blue-50/40'
+                                            : 'bg-white text-slate-700 border border-slate-200 hover:border-blue-400 hover:bg-blue-50/60 hover:text-blue-700 shadow-2xs'
                                         }`}
                                       >
                                         {opt}
                                       </button>
                                     );
                                   })}
+
+                                  {/* İnce Ayırıcı Çizgi */}
+                                  <span className="w-px h-3.5 sm:h-4 bg-slate-300/80 mx-0.5 shrink-0" />
 
                                   {/* İptal / Joker Soru (★) Butonu */}
                                   <button
@@ -676,12 +699,16 @@ export function KeysTab({ exam, updateExam, totalQ }: KeysTabProps) {
                                       e.stopPropagation();
                                       toggleCancelled(gIdx);
                                     }}
-                                    className={`w-6.5 h-6.5 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center select-none active:scale-90 ml-0.5 ${
+                                    className={`rounded-lg font-bold transition-all cursor-pointer flex items-center justify-center select-none active:scale-90 shrink-0 ${
+                                      exam.optionsCount === 5
+                                        ? 'w-6 h-6 sm:w-6.5 sm:h-6.5 text-[11px]'
+                                        : 'w-6.5 h-6.5 sm:w-7 sm:h-7 text-xs'
+                                    } ${
                                       isCancelled
-                                        ? 'bg-amber-500 text-white shadow-2xs ring-2 ring-amber-400'
-                                        : 'bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-600'
+                                        ? 'bg-amber-500 text-white shadow-xs ring-2 ring-amber-400'
+                                        : 'bg-white hover:bg-amber-50 hover:text-amber-700 text-slate-400 border border-slate-200/80 shadow-2xs'
                                     }`}
-                                    title="İptal / Joker Soru (MEB: Herkese Doğru Sayılır)"
+                                    title="İptal / Joker Soru (MEB Standardı: Herkese Doğru Sayılır)"
                                   >
                                     ★
                                   </button>

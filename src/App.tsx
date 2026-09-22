@@ -154,8 +154,9 @@ export default function App() {
       institution: currentExam.institution || "EĞİTİM KURUMU",
       date: new Date().toLocaleDateString('tr-TR'),
       logo: currentExam.logo || null,
-      studentList: schoolStudents, // Okul öğrenci kütüğü otomatik olarak bu sınava bağlanır
+      studentList: schoolStudents, // Okul öğrenci listesi otomatik olarak bu sınava bağlanır
       layoutType: 'split',
+      format: 'mebi',
       subjects: [
         { id: Date.now(), name: "Türkçe", count: 20, section: 1 },
         { id: Date.now() + 1, name: "Matematik", count: 20, section: 2 }
@@ -253,7 +254,7 @@ export default function App() {
             logo: imported.logo || null,
             studentList: Array.isArray(imported.studentList) ? imported.studentList : [],
             layoutType: imported.layoutType === 'standard' ? 'standard' : 'split',
-            format: imported.format || 'standard',
+            format: imported.format || 'mebi',
             subjects: imported.subjects || [],
             optionsCount: imported.optionsCount || 4,
             penalty: typeof imported.penalty === 'number' ? imported.penalty : 3,
@@ -288,7 +289,7 @@ export default function App() {
             logo: item.logo || null,
             studentList: Array.isArray(item.studentList) ? item.studentList : [],
             layoutType: item.layoutType === 'standard' ? 'standard' : 'split',
-            format: item.format || 'standard',
+            format: item.format || 'mebi',
             subjects: Array.isArray(item.subjects) ? item.subjects : [],
             optionsCount: item.optionsCount || 4,
             penalty: typeof item.penalty === 'number' ? item.penalty : 3,
@@ -582,45 +583,45 @@ export default function App() {
         </div>
 
         {/* Aktif Sınav & Açılır Sınav Listesi */}
-        <div className="p-3 border-b border-slate-800/60 bg-slate-900/90">
-          <div className="rounded-2xl bg-gradient-to-b from-slate-800/90 to-slate-900/95 border border-slate-700/70 transition-all overflow-hidden shadow-md shadow-slate-950/40">
+        <div className="px-2.5 py-2 border-b border-slate-800/60 bg-slate-900/90">
+          <div className="rounded-xl bg-slate-800/80 border border-slate-700/60 transition-all overflow-hidden shadow-xs">
             {/* Tıklanabilir Başlık / Aktif Sınav Özeti */}
             <div
               onClick={() => setIsExamDropdownOpen(!isExamDropdownOpen)}
-              className="p-3 flex items-center justify-between cursor-pointer hover:bg-slate-700/40 transition-all duration-150 group select-none relative"
+              className="px-2.5 py-2 flex items-center justify-between cursor-pointer hover:bg-slate-700/40 transition-all duration-150 group select-none relative"
               title="Kayıtlı sınavlar listesini aç / kapat"
             >
-              <div className="min-w-0 flex-1 pr-2">
-                <div className="text-[10px] uppercase font-bold text-blue-400 tracking-wider flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block ring-2 ring-emerald-500/30 animate-pulse" />
+              <div className="min-w-0 flex-1 pr-1.5">
+                <div className="text-[9px] uppercase font-bold text-blue-400 tracking-wider flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block ring-2 ring-emerald-500/30 animate-pulse" />
                   <span>Aktif Sınav</span>
-                  <span className="text-[9px] bg-slate-800/80 text-slate-300 font-semibold px-2 py-0.5 rounded-full border border-slate-700/60 ml-auto">
-                    {exams.length} Kayıtlı Sınav
+                  <span className="text-[9px] bg-slate-800 text-slate-300 font-semibold px-1.5 py-0.2 rounded border border-slate-700/60 ml-auto">
+                    {exams.length} Sınav
                   </span>
                 </div>
-                <div className="text-xs font-black text-slate-100 truncate mt-1 tracking-tight" title={currentExam.name}>
+                <div className="text-xs font-bold text-slate-100 truncate mt-0.5 tracking-tight" title={currentExam.name}>
                   {currentExam.name}
                 </div>
-                <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
-                  <span className="bg-slate-800/90 text-slate-300 px-1.5 py-0.2 rounded border border-slate-700/50 font-mono">
+                <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1 flex-wrap">
+                  <span className="bg-slate-800/90 text-slate-300 px-1.5 py-0.2 rounded border border-slate-700/50 font-mono text-[9px]">
                     {currentExam.subjects.length} Ders
                   </span>
-                  <span className="bg-slate-800/90 text-slate-300 px-1.5 py-0.2 rounded border border-slate-700/50 font-mono">
+                  <span className="bg-slate-800/90 text-slate-300 px-1.5 py-0.2 rounded border border-slate-700/50 font-mono text-[9px]">
                     {totalQ} Soru
                   </span>
-                  <span className="bg-blue-950/60 text-blue-300 font-bold px-1.5 py-0.2 rounded border border-blue-800/50 font-mono">
+                  <span className="bg-blue-950/60 text-blue-300 font-bold px-1.5 py-0.2 rounded border border-blue-800/50 font-mono text-[9px]">
                     {currentExam.results.length} Form
                   </span>
                 </div>
               </div>
 
               {/* Sağ Aksiyonlar & Açılır İkon */}
-              <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
                 <button
                   type="button"
                   onClick={() => handleCloneExam(currentExam.id)}
                   title="Aktif sınavı kopyala ve klonla"
-                  className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-700/80 rounded-lg transition-colors cursor-pointer"
+                  className="p-1 text-slate-400 hover:text-indigo-400 hover:bg-slate-700/80 rounded-md transition-colors cursor-pointer"
                 >
                   <Icons.Copy />
                 </button>
@@ -628,7 +629,7 @@ export default function App() {
                   type="button"
                   onClick={() => handleExportSingleExam()}
                   title="Aktif sınavı JSON olarak indir"
-                  className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-slate-700/80 rounded-lg transition-colors cursor-pointer"
+                  className="p-1 text-slate-400 hover:text-blue-400 hover:bg-slate-700/80 rounded-md transition-colors cursor-pointer"
                 >
                   <Icons.Download />
                 </button>
@@ -636,7 +637,7 @@ export default function App() {
                   type="button"
                   onClick={() => handleDeleteExam(currentExam.id)}
                   title="Aktif sınavı hafızadan sil"
-                  className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700/80 rounded-lg transition-colors cursor-pointer"
+                  className="p-1 text-slate-400 hover:text-red-400 hover:bg-slate-700/80 rounded-md transition-colors cursor-pointer"
                 >
                   <Icons.Trash />
                 </button>
@@ -644,7 +645,7 @@ export default function App() {
                   type="button"
                   onClick={() => setIsExamDropdownOpen(!isExamDropdownOpen)}
                   title={isExamDropdownOpen ? "Listeyi Kapat" : "Sınav Listesini Aç"}
-                  className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700/80 rounded-lg transition-colors cursor-pointer"
+                  className="p-1 text-slate-400 hover:text-white hover:bg-slate-700/80 rounded-md transition-colors cursor-pointer"
                 >
                   <span className={`inline-block transition-transform duration-200 ${isExamDropdownOpen ? 'rotate-180 text-blue-400' : ''}`}>
                     <Icons.ChevronDown />
@@ -823,10 +824,10 @@ export default function App() {
             </button>
           </div>
 
-          {/* Okul Öğrenci Kütüğü (Tüm Sınavlarda Sabit & Ortak) */}
+          {/* Okul Öğrenci Listesi (Tüm Sınavlarda Sabit & Ortak) */}
           <div>
             <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider px-3 mb-1.5 flex items-center justify-between">
-              <span>Merkezi Kütük</span>
+              <span>Öğrenci Listesi</span>
               <span className="text-[9px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.2 rounded font-bold">Sabit</span>
             </div>
             <button
@@ -839,7 +840,7 @@ export default function App() {
             >
               <span className={activeTab === 'students' ? 'text-white' : 'text-indigo-400'}><Icons.Users /></span>
               <div className="text-left flex-1 min-w-0">
-                <div className="truncate font-bold">Okul Öğrenci Kütüğü</div>
+                <div className="truncate font-bold">Öğrenci Listesi</div>
                 <div className="text-[10px] text-indigo-300/70 font-normal">Tüm sınavlarda ortak</div>
               </div>
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold font-mono ${
@@ -1171,12 +1172,12 @@ export default function App() {
 
         {/* ANA İÇERİK BİLEŞENLERİ */}
         <main
-          className={`flex-1 overflow-y-auto relative custom-scrollbar ${
+          className={`flex-1 overflow-y-auto relative custom-scrollbar scroll-smooth ${
             activeTab === 'print'
               ? 'bg-slate-300/90 p-0 pb-16 md:pb-0'
               : activeTab === 'read'
               ? 'p-0 bg-slate-950 pb-16 md:pb-0'
-              : 'p-3.5 sm:p-5 md:p-6 pb-20 md:pb-8 bg-gradient-to-b from-slate-50 to-slate-100/60'
+              : 'p-3.5 sm:p-5 md:p-6 pb-24 md:pb-10 bg-slate-50/80 antialiased'
           }`}
         >
           {activeTab === "settings" && (

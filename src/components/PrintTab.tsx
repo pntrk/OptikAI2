@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Exam, Student } from '../types';
 import { Icons } from './Icons';
 import { LocalQRCode } from './LocalQRCode';
-import { DEFAULT_OMR, OPTS_4, OPTS_5, getQuestionsLayout } from '../constants';
+import { DEFAULT_OMR, OPTS_4, OPTS_5, getQuestionsLayout, isTytExam, isAytExam } from '../constants';
 
 interface PrintLayoutProps {
   exam: Exam;
@@ -12,38 +12,27 @@ interface PrintLayoutProps {
 
 export function PrintLayout({ exam, isColorMode, student }: PrintLayoutProps) {
   const options = exam.optionsCount === 4 ? OPTS_4 : OPTS_5;
-  const isMebi = student !== null;
+  const isTyt = isTytExam(exam);
+  const isAyt = isAytExam(exam);
 
-  const renderOMR = isMebi
-    ? { ...DEFAULT_OMR, infoBox: { ...DEFAULT_OMR.infoBox, h: 35 }, qBox: { ...DEFAULT_OMR.qBox, y: 65 } }
-    : DEFAULT_OMR;
+  // Kişiye özel karekodlu optik form düzeni
+  const renderOMR = {
+    ...DEFAULT_OMR,
+    infoBox: { ...DEFAULT_OMR.infoBox, h: 35 },
+    qBox: { ...DEFAULT_OMR.qBox, y: 65 }
+  };
 
-  const { items: layoutItems, finalQBoxH, isSplit, topPadding } = getQuestionsLayout(exam, renderOMR);
+  const { items: layoutItems, finalQBoxH, isSplit, hasFourSections } = getQuestionsLayout(exam, renderOMR) as any;
 
   const themeColor = isColorMode ? '#ef4444' : '#000000';
   const themeBg = isColorMode ? '#fef2f2' : '#e5e7eb';
 
-  const getStudentChar = (fId: string, cIdx: number) => {
-    if (!student) return null;
-    let val = "";
-    if (fId === 'name') val = (student.name || "").replace(/[^A-ZÇĞİÖŞÜ ]/gi, '').toUpperCase();
-    else if (fId === 'no') val = (student.no || "").toString();
-    else if (fId === 'cls') val = (student.classStr || "").toString();
-    else if (fId === 'sec') val = (student.sectionStr || "").toUpperCase();
-    else if (fId === 'bk') return null;
-
-    const field = DEFAULT_OMR.info.fields.find(f => f.id === fId);
-    if (!field) return null;
-
-    if (field.cols === 1) return val;
-
-    if (fId === 'no') {
-      val = val.padStart(field.cols, '0');
-    } else {
-      val = val.padEnd(field.cols, ' ');
-    }
-    return val[cIdx];
-  };
+  const studentName = student?.name || "...................................................";
+  const studentNo = student?.no ? String(student.no) : "...................";
+  const studentClass = student ? `${student.classStr || ''} / ${student.sectionStr || ''}` : "...................";
+  const qrData = student
+    ? `E:${exam.id}|N:${student.no}`
+    : `E:${exam.id}|N:1001`;
 
   return (
     <div
@@ -55,11 +44,13 @@ export function PrintLayout({ exam, isColorMode, student }: PrintLayoutProps) {
         ['--print-bg' as any]: themeBg
       }}
     >
+      {/* 4 Köşe Siyah Optik Çapa İşaretleri (Kamera Hizalama İçin) */}
       <div className="anchor-mark" style={{ left: `${DEFAULT_OMR.anchorMargin}mm`, top: `${DEFAULT_OMR.anchorMargin}mm` }} />
       <div className="anchor-mark" style={{ left: `${DEFAULT_OMR.paperW - DEFAULT_OMR.anchorMargin}mm`, top: `${DEFAULT_OMR.anchorMargin}mm` }} />
       <div className="anchor-mark" style={{ left: `${DEFAULT_OMR.anchorMargin}mm`, top: `${DEFAULT_OMR.paperH - DEFAULT_OMR.anchorMargin}mm` }} />
       <div className="anchor-mark" style={{ left: `${DEFAULT_OMR.paperW - DEFAULT_OMR.anchorMargin}mm`, top: `${DEFAULT_OMR.paperH - DEFAULT_OMR.anchorMargin}mm` }} />
 
+      {/* Sınav ve Kurum Üst Başlığı */}
       <div
         className="absolute border-[2px] print-border bg-gray-50 flex items-center justify-between px-3 py-1"
         style={{ left: `${renderOMR.header.x}mm`, top: `${renderOMR.header.y}mm`, width: `${renderOMR.header.w}mm`, height: `${renderOMR.header.h}mm` }}
@@ -74,156 +65,171 @@ export function PrintLayout({ exam, isColorMode, student }: PrintLayoutProps) {
           <h1 className="text-[12px] font-black uppercase tracking-widest print-text leading-none">{exam.institution || "EĞİTİM KURUMU"}</h1>
           <h2 className="text-[8px] font-bold text-slate-600 mt-0.5 tracking-wider">{exam.name} • {exam.date || "Tarih Yok"}</h2>
         </div>
-        {!isMebi && (
-          <div style={{ height: '7.5mm', width: '7.5mm' }}>
-            <LocalQRCode data={`SINAV_ID:${exam.id}`} size={64} />
-          </div>
-        )}
       </div>
 
+      {/* Öğrenciye Özel Karekodlu Bilgi Kutusu */}
       <div
         className="absolute border-[2px] print-border bg-white"
         style={{ left: `${renderOMR.infoBox.x}mm`, top: `${renderOMR.infoBox.y}mm`, width: `${renderOMR.infoBox.w}mm`, height: `${renderOMR.infoBox.h}mm` }}
       >
-        {isMebi ? (
-          <div className="flex p-3 gap-4 h-full items-center justify-between relative">
-            <div className="flex-1 flex flex-col justify-center gap-1.5 pl-4">
-              <div className="text-[14px] font-black">{student ? student.name : "..................................................."}</div>
-              <div className="text-[10px] font-bold text-slate-600">ÖĞRENCİ NO: <span className="text-[12px] text-black">{student ? student.no : "..................."}</span></div>
-              <div className="text-[10px] font-bold text-slate-600">SINIF / ŞUBE: <span className="text-[12px] text-black">{student ? `${student.classStr} / ${student.sectionStr}` : "..................."}</span></div>
+        <div className="flex p-3 gap-3 h-full items-center justify-between relative">
+          <div className="flex-1 flex flex-col justify-center gap-1 pl-3">
+            <div className="text-[13px] font-black tracking-tight text-slate-900 truncate max-w-[100mm]">{studentName}</div>
+            <div className="flex items-center gap-4 text-[10px] font-bold text-slate-600 mt-0.5">
+              <div>ÖĞRENCİ NO: <span className="text-[12px] text-black font-mono font-bold">{studentNo}</span></div>
+              <div>SINIF / ŞUBE: <span className="text-[12px] text-black font-bold">{studentClass}</span></div>
             </div>
-
-            <div className="absolute text-[8px] font-bold text-center w-[30mm] -translate-x-1/2" style={{ left: '145.5mm', top: '8mm' }}>
-              KİTAPÇIK
-            </div>
-            {["A", "B", "C", "D"].map((b, idx) => {
-              const bx = 135 + (idx * 7);
-              const by = 18;
-              const isFilled = student && student.booklet === b;
-              return (
-                <div
-                  key={b}
-                  className={`info-bubble absolute -translate-x-1/2 -translate-y-1/2 ${isFilled ? 'bubble-filled border-black print-border-black' : ''}`}
-                  style={{ left: `${bx}mm`, top: `${by}mm` }}
-                >
-                  {b}
-                </div>
-              );
-            })}
-
-            <div className="absolute right-[5mm] top-[5mm] w-[25mm] h-[25mm] flex items-center justify-center border-2 border-black p-1 bg-white">
-              {student ? (
-                <LocalQRCode data={`E:${exam.id}|N:${student.no}|B:${student.booklet}`} size={150} />
-              ) : (
-                <div className="text-center text-[9px] text-slate-400 font-bold">ÖĞRENCİ<br />KAREKODU<br />(Kişiye Özel)</div>
-              )}
+            <div className="text-[7.5px] text-slate-400 font-medium">
+              * Kodlamalarınızı kurşun kalemle, dairelerin dışına taşırmadan yapınız.
             </div>
           </div>
-        ) : (
-          <React.Fragment>
-            {DEFAULT_OMR.info.fields.map(f => (
-              <React.Fragment key={f.id}>
-                <div
-                  className="absolute text-[5px] font-black uppercase tracking-tighter text-center print-text"
-                  style={{
-                    left: `${f.startX - renderOMR.infoBox.x}mm`,
-                    top: `${DEFAULT_OMR.info.labelY - renderOMR.infoBox.y}mm`,
-                    width: `${f.cols * DEFAULT_OMR.info.colW}mm`
-                  }}
-                >
-                  {f.label}
-                </div>
 
-                {Array.from({ length: f.cols }).map((_, cIdx) => {
-                  const centerX = (f.startX - renderOMR.infoBox.x) + (cIdx * DEFAULT_OMR.info.colW) + (DEFAULT_OMR.info.colW / 2);
-                  const printedChar = getStudentChar(f.id, cIdx);
-                  return (
-                    <React.Fragment key={`${f.id}-${cIdx}`}>
-                      <div
-                        className="info-input-box absolute -translate-x-1/2 flex items-center justify-center font-bold text-[8px] text-slate-800"
-                        style={{
-                          left: `${centerX}mm`,
-                          top: `${DEFAULT_OMR.info.inputY - renderOMR.infoBox.y}mm`,
-                          width: '4.4mm',
-                          height: '4.2mm'
-                        }}
-                      >
-                        {printedChar && printedChar !== " " ? printedChar : ""}
-                      </div>
-                      {f.items.map((item, rIdx) => {
-                        const centerY = DEFAULT_OMR.info.startY - renderOMR.infoBox.y + (rIdx * DEFAULT_OMR.info.rowH);
-                        const isFilled = printedChar === item.toString();
-                        return (
-                          <div
-                            key={`${f.id}-${cIdx}-${item}`}
-                            className={`info-bubble absolute -translate-x-1/2 -translate-y-1/2 ${isFilled ? 'bubble-filled border-black print-border-black' : ''}`}
-                            style={{ left: `${centerX}mm`, top: `${centerY}mm` }}
-                          >
-                            {item}
-                          </div>
-                        );
-                      })}
-                    </React.Fragment>
-                  );
-                })}
-              </React.Fragment>
-            ))}
-          </React.Fragment>
-        )}
+          {/* Kitapçık Türü (Öğrencinin kodlayabilmesi için hazır işaretli basılmaz, boş bırakılır) */}
+          <div className="absolute text-[8px] font-bold text-center w-[30mm] -translate-x-1/2" style={{ left: '145.5mm', top: '7.5mm' }}>
+            KİTAPÇIK TÜRÜ
+          </div>
+          {["A", "B", "C", "D"].map((b, idx) => {
+            const bx = 135 + (idx * 7);
+            const by = 18;
+            return (
+              <div
+                key={b}
+                className="info-bubble absolute -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${bx}mm`, top: `${by}mm` }}
+              >
+                {b}
+              </div>
+            );
+          })}
+
+          {/* Öğrenci Karekodu (Otomatik Eşleşme İçin) */}
+          <div className="absolute right-[5mm] top-[5mm] w-[25mm] h-[25mm] flex flex-col items-center justify-center border-2 border-black p-1 bg-white">
+            <LocalQRCode data={qrData} size={150} />
+          </div>
+        </div>
       </div>
 
+      {/* Soru ve Cevap Optik Kabarcık Alanı */}
       <div
         className="absolute border-[2px] print-border bg-white"
         style={{ left: `${renderOMR.qBox.x}mm`, top: `${renderOMR.qBox.y}mm`, width: `${renderOMR.qBox.w}mm`, height: `${finalQBoxH}mm` }}
       >
-        {isSplit && (
-          <div
-            className="absolute top-0 bottom-0 border-r-[1.5px] print-border"
-            style={{ left: '50%', transform: 'translateX(-50%)' }}
-          />
+        {/* Bölüm Başlık Şeritleri (TYT / AYT 4 Bölüm veya Standart Split Mod) */}
+        {hasFourSections ? (
+          <>
+            <div
+              className="absolute top-[1.2mm] h-[5.2mm] flex items-center justify-center print-bg print-text font-black text-[7px] tracking-wider uppercase border print-border rounded-xs px-1 text-center truncate"
+              style={{ left: '1mm', width: '45.5mm' }}
+            >
+              {isTyt ? '1. TÜRKÇE TESTİ' : isAyt ? '1. EDEBİYAT - SOS-1' : '1. TEST ALANI'}
+            </div>
+            <div
+              className="absolute top-[1.2mm] h-[5.2mm] flex items-center justify-center print-bg print-text font-black text-[7px] tracking-wider uppercase border print-border rounded-xs px-1 text-center truncate"
+              style={{ left: '48.5mm', width: '45.5mm' }}
+            >
+              {isTyt ? '2. SOSYAL BİLİMLER' : isAyt ? '2. SOSYAL BİLİMLER-2' : '2. TEST ALANI'}
+            </div>
+            <div
+              className="absolute top-[1.2mm] h-[5.2mm] flex items-center justify-center print-bg print-text font-black text-[7px] tracking-wider uppercase border print-border rounded-xs px-1 text-center truncate"
+              style={{ left: '96mm', width: '45.5mm' }}
+            >
+              {isTyt ? '3. TEMEL MATEMATİK' : isAyt ? '3. MATEMATİK TESTİ' : '3. TEST ALANI'}
+            </div>
+            <div
+              className="absolute top-[1.2mm] h-[5.2mm] flex items-center justify-center print-bg print-text font-black text-[7px] tracking-wider uppercase border print-border rounded-xs px-1 text-center truncate"
+              style={{ left: '143.5mm', width: '45.5mm' }}
+            >
+              {isTyt ? '4. FEN BİLİMLERİ' : isAyt ? '4. FEN BİLİMLERİ' : '4. TEST ALANI'}
+            </div>
+          </>
+        ) : isSplit ? (
+          <>
+            <div
+              className="absolute top-[1.2mm] h-[5.2mm] flex items-center justify-center print-bg print-text font-black text-[8px] tracking-wider uppercase border print-border rounded-sm"
+              style={{ left: '1mm', width: '92.5mm' }}
+            >
+              1. BÖLÜM (SÖZEL ALAN)
+            </div>
+            <div
+              className="absolute top-[1.2mm] h-[5.2mm] flex items-center justify-center print-bg print-text font-black text-[8px] tracking-wider uppercase border print-border rounded-sm"
+              style={{ left: '96.5mm', width: '92.5mm' }}
+            >
+              2. BÖLÜM (SAYISAL ALAN)
+            </div>
+          </>
+        ) : null}
+
+        {/* Ana Seksiyon Ayraçları */}
+        {hasFourSections ? (
+          <>
+            <div className="absolute top-0 bottom-0 border-r-[1.5px] print-border" style={{ left: '47.5mm' }} />
+            <div className="absolute top-0 bottom-0 border-r-[2px] print-border" style={{ left: '95mm' }} />
+            <div className="absolute top-0 bottom-0 border-r-[1.5px] print-border" style={{ left: '142.5mm' }} />
+          </>
+        ) : isSplit ? (
+          <>
+            <div className="absolute top-0 bottom-0 border-r-[2px] print-border" style={{ left: '95mm' }} />
+            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: '47.5mm', top: '7.5mm', bottom: '1mm' }} />
+            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: '142.5mm', top: '7.5mm', bottom: '1mm' }} />
+          </>
+        ) : (
+          <>
+            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: '47.5mm', top: '1mm', bottom: '1mm' }} />
+            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: '95mm', top: '1mm', bottom: '1mm' }} />
+            <div className="absolute border-r border-dashed border-slate-200 pointer-events-none" style={{ left: '142.5mm', top: '1mm', bottom: '1mm' }} />
+          </>
         )}
 
-        {layoutItems.map((item, idx) => {
+        {layoutItems.map((item: any, idx: number) => {
           const topY = item.y - renderOMR.qBox.y;
+          const colW = renderOMR.questions.colW;
+          const colLeft = item.cIdx * colW;
 
           if (item.type === 'header') {
             return (
               <div
                 key={`h-${idx}`}
-                className="absolute font-black text-[7.5px] tracking-wider uppercase text-center print-text print-bg py-0.5 border-t border-b print-border flex items-center justify-center -translate-y-1/2"
+                className="absolute font-black text-[7.5px] tracking-wider uppercase text-center print-text print-bg py-0.5 border-t border-b print-border flex items-center justify-center -translate-y-1/2 px-1"
                 style={{
-                  left: `${item.cIdx * renderOMR.questions.colW + 1}mm`,
+                  left: `${colLeft + 1}mm`,
                   top: `${topY}mm`,
-                  width: `${renderOMR.questions.colW - 2}mm`,
+                  width: `${colW - 2}mm`,
                   height: `${item.h}mm`
                 }}
               >
-                {item.text}
+                <span className="truncate">{item.text}</span>
               </div>
             );
           }
 
-          const qNumX = (item.cIdx * renderOMR.questions.colW) + (DEFAULT_OMR.questions as any).qNumOffset;
+          const qNumLeft = colLeft + (renderOMR.questions.qNumOffset ?? 0.8);
+          const qNumWidth = renderOMR.questions.qNumWidth ?? 6.6;
+          const qNumber = (item.localIdx !== undefined ? item.localIdx + 1 : (item.qIdx !== undefined ? item.qIdx + 1 : 1));
 
           return (
-            <React.Fragment key={`q-${item.qIdx}`}>
+            <React.Fragment key={`q-${item.qIdx ?? idx}`}>
+              {/* Soru Numarası: Her zaman tam hesaplanmış koordinat ile hizalanır */}
               <div
-                className="absolute font-bold text-[8px] print-text text-right -translate-y-1/2 flex items-center justify-end"
+                className="absolute font-mono font-bold text-[8.5px] print-text text-right select-none flex items-center justify-end pr-1 pointer-events-none"
                 style={{
-                  left: `${qNumX}mm`,
+                  left: `${qNumLeft}mm`,
                   top: `${topY}mm`,
-                  width: '6mm'
+                  width: `${qNumWidth}mm`,
+                  height: `${Math.max(3.2, item.h)}mm`,
+                  transform: 'translateY(-50%)',
+                  lineHeight: 1
                 }}
               >
-                {(item.localIdx ?? 0) + 1}.
+                {qNumber}.
               </div>
 
+              {/* Seçenek Kabarcıkları */}
               {options.map((o, optIdx) => {
-                const centerX = (item.cIdx * renderOMR.questions.colW) + renderOMR.questions.startXOffset + (optIdx * renderOMR.questions.bubbleGap);
+                const centerX = colLeft + renderOMR.questions.startXOffset + (optIdx * renderOMR.questions.bubbleGap);
                 return (
                   <div
                     key={`${item.qIdx}-${o}`}
-                    className="bubble absolute -translate-x-1/2 -translate-y-1/2"
+                    className="bubble absolute font-bold -translate-x-1/2 -translate-y-1/2"
                     style={{ left: `${centerX}mm`, top: `${topY}mm` }}
                   >
                     {o}
@@ -233,6 +239,14 @@ export function PrintLayout({ exam, isColorMode, student }: PrintLayoutProps) {
             </React.Fragment>
           );
         })}
+      </div>
+
+      {/* Sayfa Altı Kurumsal Bilgilendirme */}
+      <div
+        className="absolute text-[7.5px] font-bold tracking-widest text-slate-400 uppercase text-center w-full select-none pointer-events-none"
+        style={{ bottom: '4mm', left: 0 }}
+      >
+        {exam.institution || "EĞİTİM KURUMU"} • {exam.name} • KAREKODLU AKILLI OPTİK FORM
       </div>
     </div>
   );
@@ -247,17 +261,16 @@ interface PrintTabProps {
 
 export function PrintTab({ exam, updateExam: _updateExam, schoolStudents, showAlert }: PrintTabProps) {
   const [isColorMode, setIsColorMode] = useState(true);
-  const [printFormat, setPrintFormat] = useState<'standard' | 'mebi'>('standard');
   const [selectedClassFilter, setSelectedClassFilter] = useState("ALL");
   const [isPrinting, setIsPrinting] = useState(false);
 
-  // Active student list (prioritizing master school roster)
+  // Aktif öğrenci listesi (varsa genel okul listesinden veya sınav listesinden)
   const effectiveStudentList = useMemo(() => {
     if (schoolStudents && schoolStudents.length > 0) return schoolStudents;
     return exam.studentList || [];
   }, [schoolStudents, exam.studentList]);
 
-  // Zoom scale for preview: auto-adaptive for mobile/desktop
+  // Önizleme ölçeği (mobil ve masaüstü duyarlı)
   const [previewScale, setPreviewScale] = useState<number>(() => {
     if (typeof window !== 'undefined' && window.innerWidth < 640) {
       return 0.38;
@@ -277,14 +290,17 @@ export function PrintTab({ exam, updateExam: _updateExam, schoolStudents, showAl
     return [...new Set(classesList)].sort((a, b) => a.localeCompare(b, 'tr', { numeric: true }));
   }, [effectiveStudentList]);
 
-  // Compute print students based on format and filter
-  const printStudents = useMemo(() => {
-    if (printFormat === 'standard') {
-      return [null];
-    }
-
+  // Yazdırılacak / Önizlenecek Öğrenciler (Her zaman kişiye özel karekodlu)
+  const printStudents: Student[] = useMemo(() => {
     if (!effectiveStudentList || effectiveStudentList.length === 0) {
-      return [];
+      // Liste boş ise örnek önizleme tek kartı
+      return [{
+        name: "ÖRNEK ÖĞRENCİ (ÖNİZLEME)",
+        no: "1001",
+        classStr: "8",
+        sectionStr: "A",
+        booklet: "A"
+      }];
     }
 
     if (selectedClassFilter === "ALL") {
@@ -297,11 +313,18 @@ export function PrintTab({ exam, updateExam: _updateExam, schoolStudents, showAl
       const val = (c && s) ? `${c}/${s}` : (c || s || "");
       return val === selectedClassFilter;
     });
-  }, [printFormat, effectiveStudentList, selectedClassFilter]);
+  }, [effectiveStudentList, selectedClassFilter]);
+
+  const hasRealStudents = effectiveStudentList && effectiveStudentList.length > 0;
 
   const handlePrint = () => {
-    if (printFormat === 'mebi' && printStudents.length === 0) {
-      showAlert("Yazdırılacak öğrenci bulunamadı. Lütfen önce Öğrenci Listesi sekmesinden öğrenci ekleyin veya sınıf filtresini değiştirin.");
+    if (!hasRealStudents) {
+      showAlert("Henüz Öğrenci Listesi sekmesinde kayıtlı öğrenci bulunmuyor. Gerçek formları basabilmek için lütfen 'Öğrenci Listesi' sekmesinden e-Okul öğrenci listenizi ekleyin veya aktarın.");
+      return;
+    }
+
+    if (printStudents.length === 0) {
+      showAlert("Seçilen filtreye uygun öğrenci bulunamadı. Lütfen sınıf filtresini değiştirin.");
       return;
     }
 
@@ -309,7 +332,7 @@ export function PrintTab({ exam, updateExam: _updateExam, schoolStudents, showAl
     if (!printWindow) return showAlert("Lütfen tarayıcınızın açılır pencere (pop-up) engelleyicisine izin verin.");
 
     printWindow.document.open();
-    printWindow.document.write('<!DOCTYPE html><html lang="tr"><head><title>Baskı Hazırlanıyor...</title><style>body{font-family:sans-serif;text-align:center;padding-top:20%;color:#475569;background:#f8fafc;}</style></head><body><h2>Optik Formlar Yazıcıya Gönderiliyor, lütfen bekleyin...</h2></body></html>');
+    printWindow.document.write('<!DOCTYPE html><html lang="tr"><head><title>Baskı Hazırlanıyor...</title><style>body{font-family:sans-serif;text-align:center;padding-top:20%;color:#475569;background:#f8fafc;}</style></head><body><h2>Karekodlu Optik Formlar Yazıcıya Gönderiliyor, lütfen bekleyin...</h2></body></html>');
     printWindow.document.close();
 
     setIsPrinting(true);
@@ -317,13 +340,16 @@ export function PrintTab({ exam, updateExam: _updateExam, schoolStudents, showAl
     setTimeout(() => {
       let printHTML = '<div id="print-wrapper">';
       document.querySelectorAll('.print-page-node').forEach(c => {
-        const clone = c.cloneNode(true) as HTMLElement;
-        clone.className = "a4-preview-container";
-        printHTML += clone.outerHTML;
+        const optikPage = c.querySelector('.optik-page');
+        if (optikPage) {
+          printHTML += optikPage.outerHTML;
+        } else {
+          printHTML += c.outerHTML;
+        }
       });
       printHTML += '</div>';
 
-      printWindow.document.head.innerHTML = '<title>Optik Form Baskı</title>';
+      printWindow.document.head.innerHTML = '<title>Karekodlu Optik Form Baskı</title>';
       document.querySelectorAll('style, link[rel="stylesheet"]').forEach(n => printWindow.document.head.appendChild(n.cloneNode(true)));
 
       const s = printWindow.document.createElement('style');
@@ -333,8 +359,8 @@ export function PrintTab({ exam, updateExam: _updateExam, schoolStudents, showAl
           margin: 0 !important;
           padding: 0 !important;
           background: white !important;
-          width: 100% !important;
-          height: 100% !important;
+          width: 210mm !important;
+          height: 297mm !important;
         }
         #print-wrapper {
           display: block;
@@ -342,30 +368,22 @@ export function PrintTab({ exam, updateExam: _updateExam, schoolStudents, showAl
           margin: 0;
           padding: 0;
         }
-        .a4-preview-container, .optik-page {
+        .optik-page {
           width: 210mm !important;
-          height: 296mm !important;
+          height: 297mm !important;
           margin: 0 auto !important;
           padding: 0 !important;
           background: white !important;
           box-sizing: border-box !important;
           border: none !important;
           box-shadow: none !important;
-          zoom: 0.95 !important;
           page-break-after: always !important;
           page-break-inside: avoid !important;
           overflow: hidden !important;
           position: relative !important;
-          top: 3mm !important;
         }
-        .a4-preview-container:last-child, .optik-page:last-child {
+        .optik-page:last-child {
           page-break-after: auto !important;
-        }
-        @-moz-document url-prefix() {
-          .a4-preview-container, .optik-page {
-            transform: scale(0.95) !important;
-            transform-origin: top center !important;
-          }
         }
         * {
           -webkit-print-color-adjust: exact !important;
@@ -384,245 +402,200 @@ export function PrintTab({ exam, updateExam: _updateExam, schoolStudents, showAl
     }, 1200);
   };
 
-  const totalPages = printStudents.length;
+  const totalPages = hasRealStudents ? printStudents.length : 1;
 
   return (
     <div className="flex flex-col h-full w-full no-print bg-slate-100 overflow-hidden">
-      {/* Top Modern Header & Controls Card */}
-      <div className="bg-white px-3.5 sm:px-6 py-3.5 shadow-xs border-b border-slate-200/80 shrink-0 z-10">
+      {/* Üst Kontrol Paneli */}
+      <div className="bg-white px-3.5 sm:px-6 py-3 shadow-2xs border-b border-slate-200/80 shrink-0 z-10">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          {/* Title and Info */}
+          {/* Başlık ve Durum */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shadow-xs shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-center text-emerald-600 shadow-2xs shrink-0">
               <Icons.Printer />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-bold text-slate-800 tracking-tight">
-                  Optik Form Baskı & Önizleme
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+                  Öğrenciye Özel Karekodlu Form Baskısı
                 </h2>
-                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  {totalPages} {totalPages === 1 ? 'Sayfa' : 'Öğrenci'}
+                <span className="text-xs font-bold px-2.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  {hasRealStudents ? `${totalPages} Öğrenci Hazır` : 'Örnek Önizleme'}
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5 hidden sm:block">
-                A4 standartlarında optik form şablonu • 4 köşe karekod ve siyah çapa uyumlu
+                Her öğrenci için benzersiz karekod basılır. Kamera taramasında öğrenci bilgileri ve cevap anahtarı anında otomatik eşleşir.
               </p>
             </div>
           </div>
 
-          {/* Primary Action & Print Button */}
+          {/* Yazdır Butonu */}
           <div className="flex items-center gap-2 self-stretch lg:self-auto">
             <button
               onClick={handlePrint}
-              disabled={isPrinting || totalPages === 0}
-              className={`flex-1 lg:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 active:scale-95 rounded-xl shadow-xs shadow-emerald-600/30 transition-all cursor-pointer ${
-                isPrinting || totalPages === 0 ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
+              disabled={isPrinting}
+              className="flex-1 lg:flex-initial flex items-center justify-center gap-2 px-5 py-2 text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 active:scale-95 rounded-lg shadow-2xs transition-all cursor-pointer disabled:opacity-50"
             >
               <Icons.Printer />
-              <span>{isPrinting ? 'Hazırlanıyor...' : `Yazdır (${totalPages} Sayfa)`}</span>
+              <span>{isPrinting ? 'Hazırlanıyor...' : `Karekodlu Formları Yazdır (${totalPages} Sayfa)`}</span>
             </button>
           </div>
         </div>
 
-        {/* Controls Toolbar (Format, Color Mode, Class Filter, Zoom) */}
-        <div className="mt-3.5 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
-          {/* Format Selector: Standart (Boş) vs MEBİ (Karekodlu/Öğrencili) */}
-          <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 text-xs font-bold w-full sm:w-auto">
-            <button
-              type="button"
-              onClick={() => setPrintFormat('standard')}
-              className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg transition-all text-center cursor-pointer ${
-                printFormat === 'standard'
-                  ? 'bg-white text-blue-600 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              📄 Standart Boş Form
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (!exam.studentList || exam.studentList.length === 0) {
-                  showAlert("Öğrenci Listesi sekmesinde henüz öğrenci bulunmuyor. Yine de önizleme şablonu oluşturuldu.");
-                }
-                setPrintFormat('mebi');
-              }}
-              className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg transition-all text-center cursor-pointer ${
-                printFormat === 'mebi'
-                  ? 'bg-white text-blue-600 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              👤 Kişiye Özel (MEBİ Karekodlu)
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
-            {/* Color Mode: Red/Color vs Black/White */}
-            <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 text-xs font-bold">
+        {/* Araç Çubuğu (Renk Seçimi, Sınıf Filtresi, Ölçek) */}
+        <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Renk Seçimi: Kırmızı Optik vs Siyah-Beyaz */}
+            <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs font-bold">
               <button
                 type="button"
                 onClick={() => setIsColorMode(true)}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
                   isColorMode
                     ? 'bg-white text-red-600 shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
                 title="Kırmızı Optik Mürekkebi"
               >
-                🔴 Renkli
+                🔴 Kırmızı Mürekkep
               </button>
               <button
                 type="button"
                 onClick={() => setIsColorMode(false)}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
                   !isColorMode
                     ? 'bg-white text-slate-900 shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
                 title="Siyah-Beyaz Fotokopi Uyumu"
               >
-                ⚫ S/B
+                ⚫ Siyah / Beyaz
               </button>
             </div>
 
-            {/* Sınıf Filtresi (Sadece MEBİ modunda varsa aktif) */}
-            {printFormat === 'mebi' && availableClasses.length > 0 && (
-              <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-bold shadow-2xs">
+            {/* Sınıf Filtresi */}
+            {availableClasses.length > 0 && (
+              <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-bold shadow-2xs">
                 <span className="text-slate-400 uppercase text-[10px] tracking-wider">Sınıf:</span>
                 <select
                   value={selectedClassFilter}
                   onChange={(e) => setSelectedClassFilter(e.target.value)}
                   className="bg-transparent text-indigo-600 focus:outline-none cursor-pointer pr-1"
                 >
-                  <option value="ALL">Tüm Liste ({exam.studentList?.length || 0})</option>
+                  <option value="ALL">Tüm Sınıflar ({effectiveStudentList.length} Öğrenci)</option>
                   {availableClasses.map(c => <option key={c} value={c}>{c} Sınıfı</option>)}
                 </select>
               </div>
             )}
+          </div>
 
-            {/* Önizleme Yakınlaştırma (Scale Selector) */}
-            <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 text-xs font-semibold">
-              <span className="text-[10px] uppercase font-bold text-slate-400 px-1 hidden sm:inline">Ölçek:</span>
-              <button
-                type="button"
-                onClick={() => setPreviewScale(0.38)}
-                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                  previewScale === 0.38 ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-800'
-                }`}
-                title="Mobil Cihaza Sığdır (%38)"
-              >
-                Sığdır
-              </button>
-              <button
-                type="button"
-                onClick={() => setPreviewScale(0.6)}
-                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                  previewScale === 0.6 ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-800'
-                }`}
-                title="Orta Boyut (%60)"
-              >
-                Orta
-              </button>
-              <button
-                type="button"
-                onClick={() => setPreviewScale(0.85)}
-                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                  previewScale === 0.85 ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-800'
-                }`}
-                title="Büyük Boyut (%85)"
-              >
-                Büyük
-              </button>
-            </div>
+          {/* Önizleme Yakınlaştırma (Scale) */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs font-semibold">
+            <span className="text-[10px] uppercase font-bold text-slate-400 px-1 hidden sm:inline">Ölçek:</span>
+            <button
+              type="button"
+              onClick={() => setPreviewScale(0.38)}
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                previewScale === 0.38 ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Sığdır
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreviewScale(0.6)}
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                previewScale === 0.6 ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Orta
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreviewScale(0.85)}
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                previewScale === 0.85 ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Büyük
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Main Preview Container with Responsive Scaling */}
+      {/* Ana Önizleme Alanı */}
       <div className="flex-1 overflow-auto p-3 sm:p-6 md:p-8 flex flex-col items-center custom-scrollbar">
-        {printStudents.length === 0 ? (
-          <div className="bg-white rounded-2xl p-8 max-w-sm text-center border border-slate-200 shadow-xs my-auto">
-            <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-3">
-              <Icons.Users />
+        <div className="flex flex-col gap-5 items-center w-full max-w-5xl">
+          {/* Öğrenci listesi uyarısı veya durum bilgi kutusu */}
+          {!hasRealStudents ? (
+            <div className="w-full max-w-[210mm] bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-xl text-xs flex items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-center gap-2.5">
+                <span className="text-base">💡</span>
+                <div>
+                  <div className="font-bold">Öğrenci Listesi Henüz Yüklenmedi (Örnek Önizleme Gösteriliyor)</div>
+                  <div className="text-amber-700 mt-0.5">
+                    <b>"Öğrenci Listesi"</b> sekmesinden e-Okul listenizi yüklediğinizde, her öğrenciniz için ad, numara, sınıf ve kitapçık bilgisi karekoda işlenmiş olarak otomatik üretilecektir.
+                  </div>
+                </div>
+              </div>
             </div>
-            <h4 className="font-bold text-slate-800 text-base mb-1">
-              Öğrenci Kaydı Bulunamadı
-            </h4>
-            <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-              Seçilen sınıf filtresinde öğrenci bulunmuyor veya henüz öğrenci listesi yüklemediniz.
-            </p>
-            <button
-              onClick={() => setPrintFormat('standard')}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl transition-all cursor-pointer"
-            >
-              Standart Boş Formu Göster
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-6 items-center w-full max-w-5xl">
-            {/* Format info pill banner */}
-            <div className="bg-white/80 backdrop-blur-xs px-4 py-2 rounded-xl border border-slate-200/80 text-xs text-slate-600 shadow-2xs flex items-center gap-2">
+          ) : (
+            <div className="bg-white/90 px-3.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 shadow-2xs flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span>
-                {printFormat === 'standard'
-                  ? 'Boş Standart Optik Form (Tüm öğrenciler için ortak çoğaltılabilir)'
-                  : `Kişiye Özel MEBİ Karekodlu Form (${printStudents.length} Öğrenci hazırlandı)`}
+              <span className="font-medium">
+                Kişiye Özel Karekodlu Optik Formlar ({printStudents.length} Öğrenci hazırlandı)
               </span>
             </div>
+          )}
 
-            {/* A4 Form Preview Box */}
-            {printStudents.slice(0, 3).map((student, idx) => (
+          {/* Form Önizlemeleri (Performans için ilk 3 form gösterilir) */}
+          {printStudents.slice(0, 3).map((student, idx) => (
+            <div
+              key={`preview-${idx}`}
+              className="rounded-xl overflow-hidden shadow-xl border border-slate-300/80 bg-white flex flex-col items-center"
+            >
+              <div className="w-full bg-slate-800 text-white text-xs font-bold px-4 py-2 flex items-center justify-between">
+                <span>{idx + 1}. Form: {student.name}</span>
+                <span className="text-slate-400 font-mono">No: {student.no} {student.classStr ? `(${student.classStr}/${student.sectionStr || ''})` : ''}</span>
+              </div>
               <div
-                key={`preview-${idx}`}
-                className="rounded-xl overflow-hidden shadow-xl border border-slate-300/80 bg-white flex flex-col items-center"
+                className="a4-preview-container origin-top transform-gpu"
+                style={{
+                  transform: `scale(var(--preview-scale, ${previewScale}))`,
+                  marginBottom: `calc((297mm * ${previewScale}) - 297mm)`
+                }}
               >
-                {printFormat === 'mebi' && student && (
-                  <div className="w-full bg-slate-800 text-white text-xs font-bold px-4 py-2 flex items-center justify-between">
-                    <span>{idx + 1}. Form: {student.name}</span>
-                    <span className="text-slate-400 font-mono">No: {student.no}</span>
-                  </div>
-                )}
-                <div
-                  className="a4-preview-container origin-top transform-gpu"
-                  style={{
-                    transform: `scale(var(--preview-scale, ${previewScale}))`,
-                    marginBottom: `calc((297mm * ${previewScale}) - 297mm)`
-                  }}
-                >
-                  <PrintLayout exam={exam} isColorMode={isColorMode} student={student} />
-                </div>
+                <PrintLayout exam={exam} isColorMode={isColorMode} student={student} />
               </div>
-            ))}
+            </div>
+          ))}
 
-            {/* More forms notification */}
-            {printStudents.length > 3 && (
-              <div className="p-4 sm:p-5 bg-white border border-blue-200 text-blue-800 rounded-2xl text-center w-full max-w-[210mm] shadow-xs flex flex-col items-center gap-2">
-                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                  <Icons.List />
-                </div>
-                <h4 className="font-bold text-sm sm:text-base">
-                  + {printStudents.length - 3} Öğrencinin Formu Daha Var
-                </h4>
-                <p className="text-xs text-slate-500 max-w-md leading-relaxed">
-                  Cihaz performansını ve akıcılığı korumak için önizlemede ilk 3 form listelenir.<br />
-                  <b>"Yazdır"</b> butonuna bastığınızda {printStudents.length} sayfanın tümü baskı penceresine aktarılacaktır.
-                </p>
-                <button
-                  onClick={handlePrint}
-                  className="mt-1 px-5 py-2 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <Icons.Printer />
-                  <span>Hepsini Yazdır ({printStudents.length} Sayfa)</span>
-                </button>
+          {/* 3'ten fazla öğrenci varsa bilgilendirme kutusu */}
+          {printStudents.length > 3 && (
+            <div className="p-4 sm:p-5 bg-white border border-blue-200 text-blue-800 rounded-xl text-center w-full max-w-[210mm] shadow-2xs flex flex-col items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                <Icons.List />
               </div>
-            )}
-          </div>
-        )}
+              <h4 className="font-bold text-sm sm:text-base">
+                + {printStudents.length - 3} Öğrencinin Formu Daha Var
+              </h4>
+              <p className="text-xs text-slate-500 max-w-md leading-relaxed">
+                Cihaz performansını ve akıcılığı korumak için önizlemede ilk 3 form listelenir.<br />
+                <b>"Karekodlu Formları Yazdır"</b> butonuna bastığınızda {printStudents.length} sayfanın tümü baskı penceresine aktarılacaktır.
+              </p>
+              <button
+                onClick={handlePrint}
+                className="mt-1 px-4 py-2 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-xs rounded-lg shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Icons.Printer />
+                <span>Hepsini Yazdır ({printStudents.length} Sayfa)</span>
+              </button>
+            </div>
+          )}
+        </div>
 
-        {/* Hidden Container for Actual Print Cloning */}
+        {/* Yazdırma işlemi için gizli DOM düğümleri */}
         {isPrinting && (
           <div className="hidden">
             {printStudents.map((student, idx) => (

@@ -41,6 +41,8 @@ export const DEFAULT_OMR = {
     colW: 47.5,
     bubbleGap: 7.2,
     startXOffset: 9.5,
+    qNumOffset: 0.8,
+    qNumWidth: 6.6,
     rowHeightMod: 1.0
   }
 };
@@ -75,51 +77,71 @@ export function getTotalQuestions(subjects: Subject[]): number {
 
 export function getQuestionsLayout(exam: Exam, omr = DEFAULT_OMR) {
   const items: LayoutItem[] = [];
+  const hasFourSections = exam && exam.subjects && exam.subjects.some(s => s.section === 3 || s.section === 4);
   const isSplit = exam.layoutType === 'split';
-  const topPadding = isSplit ? 8 : 2;
+  const topPadding = (isSplit || hasFourSections) ? 8 : 2;
 
   const maxAllowedY = 283;
   const availableHeight = maxAllowedY - omr.qBox.y - topPadding;
 
   if (!exam || !exam.subjects || exam.subjects.length === 0) {
-    return { items: [], rowH: 4.8, finalQBoxH: 10, isSplit, topPadding };
+    return { items: [], rowH: 4.8, finalQBoxH: 10, isSplit, hasFourSections, topPadding };
   }
 
   const cols: Subject[][] = [[], [], [], []];
   const colUnits = [0, 0, 0, 0];
 
-  if (isSplit) {
-    const sec1Subs = exam.subjects.filter(s => s.section !== 2);
-    const sec2Subs = exam.subjects.filter(s => s.section === 2);
-
-    sec1Subs.forEach(sub => {
-      const targetCol = (colUnits[0] <= colUnits[1]) ? 0 : 1;
-      cols[targetCol].push(sub);
-      colUnits[targetCol] += sub.count + 3;
+  if (hasFourSections) {
+    // 4 Test Alanı (TYT / AYT veya 4 Ayrı Bölümlü Sınavlar)
+    // Her bölüm doğrudan kendi sütununa (0, 1, 2, 3) yerleşir
+    [1, 2, 3, 4].forEach((secNum, cIdx) => {
+      const subsInSec = exam.subjects.filter(s => (s.section || 1) === secNum);
+      subsInSec.forEach(sub => {
+        cols[cIdx].push(sub);
+        colUnits[cIdx] += sub.count + 2.5;
+      });
     });
+  } else if (isSplit) {
+    let sec1Subs = exam.subjects.filter(s => s.section !== 2);
+    let sec2Subs = exam.subjects.filter(s => s.section === 2);
 
-    sec2Subs.forEach(sub => {
-      const targetCol = (colUnits[2] <= colUnits[3]) ? 2 : 3;
-      cols[targetCol].push(sub);
-      colUnits[targetCol] += sub.count + 3;
-    });
+    if (sec2Subs.length === 0 && sec1Subs.length >= 2) {
+      const half = Math.ceil(sec1Subs.length / 2);
+      sec2Subs = sec1Subs.slice(half);
+      sec1Subs = sec1Subs.slice(0, half);
+    }
+
+    const assignOrdered = (subs: Subject[], colA: number, colB: number) => {
+      const total = subs.reduce((acc, s) => acc + s.count + 3, 0);
+      const halfTotal = total / 2;
+      subs.forEach(sub => {
+        if (cols[colA].length > 0 && (colUnits[colA] + (sub.count + 3) / 2 > halfTotal)) {
+          cols[colB].push(sub);
+          colUnits[colB] += sub.count + 3;
+        } else {
+          cols[colA].push(sub);
+          colUnits[colA] += sub.count + 3;
+        }
+      });
+    };
+
+    assignOrdered(sec1Subs, 0, 1);
+    assignOrdered(sec2Subs, 2, 3);
   } else {
-    const largeSubs = exam.subjects.filter(s => s.count > 10);
-    const smallSubs = exam.subjects.filter(s => s.count <= 10);
-
-    largeSubs.forEach((sub, i) => {
-      cols[i % 4].push(sub);
-      colUnits[i % 4] += sub.count + 3;
-    });
-
-    smallSubs.forEach((sub, i) => {
-      cols[i % 4].push(sub);
-      colUnits[i % 4] += sub.count + 3;
+    const total = exam.subjects.reduce((acc, s) => acc + s.count + 3, 0);
+    const targetPerCol = Math.max(15, Math.ceil(total / 4));
+    let curCol = 0;
+    exam.subjects.forEach(sub => {
+      if (curCol < 3 && cols[curCol].length > 0 && colUnits[curCol] + sub.count + 3 > targetPerCol + 3) {
+        curCol++;
+      }
+      cols[curCol].push(sub);
+      colUnits[curCol] += sub.count + 3;
     });
   }
 
   const maxColUnits = Math.max(...colUnits) || 1;
-  const baseRowH = Math.min(5.6, availableHeight / maxColUnits);
+  const baseRowH = Math.max(3.4, Math.min(5.6, availableHeight / maxColUnits));
   const rowH = baseRowH * (omr.questions.rowHeightMod || 1.0);
 
   const subStartQ: { [id: number]: number } = {};
@@ -167,7 +189,7 @@ export function getQuestionsLayout(exam: Exam, omr = DEFAULT_OMR) {
   });
 
   const finalQBoxH = Math.max(...colMaxY) - omr.qBox.y;
-  return { items, rowH, finalQBoxH: Math.max(finalQBoxH, 10), isSplit, topPadding };
+  return { items, rowH, finalQBoxH: Math.max(finalQBoxH, 10), isSplit, hasFourSections, topPadding };
 }
 
 // LGS 2026 Sınav Verilerine Göre Frekans & Yüzdelik Dilim Dağılım Tablosu (MEB Projeksiyonu)
@@ -198,16 +220,45 @@ export const LGS_2026_PERCENTILE_TABLE = [
   { score: 100.00, percentile: 99.99 }
 ];
 
-export function isLgsExam(exam: { format?: string; name?: string; subjects?: Subject[] } | undefined | null): boolean {
+export function isTytExam(exam: { format?: string; name?: string; subjects?: Subject[]; optionsCount?: number } | undefined | null): boolean {
   if (!exam) return false;
-  if (exam.format === 'mebi') return true;
+  if (exam.format === 'tyt') return true;
   const name = (exam.name || '').toLowerCase();
-  if (name.includes('mebi') || name.includes('lgs')) return true;
+  if (name.includes('tyt') || name.includes('temel yeterlilik')) return true;
+  if (exam.subjects && exam.subjects.some(s => s.name.toLowerCase().includes('temel mat'))) return true;
+  const totalQ = exam.subjects ? exam.subjects.reduce((sum, s) => sum + s.count, 0) : 0;
+  if (totalQ === 120 && exam.optionsCount === 5) return true;
+  return false;
+}
+
+export function isAytExam(exam: { format?: string; name?: string; subjects?: Subject[]; optionsCount?: number } | undefined | null): boolean {
+  if (!exam) return false;
+  if (exam.format === 'ayt') return true;
+  const name = (exam.name || '').toLowerCase();
+  if (name.includes('ayt') || name.includes('alan yeterlilik')) return true;
+  if (exam.subjects && exam.subjects.some(s => {
+    const sn = s.name.toLowerCase();
+    return sn.includes('edebiyat') || sn.includes('sosyal-2') || sn.includes('sosyal 2');
+  })) return true;
+  const totalQ = exam.subjects ? exam.subjects.reduce((sum, s) => sum + s.count, 0) : 0;
+  if (totalQ === 160 && exam.optionsCount === 5) return true;
+  return false;
+}
+
+export function isLgsExam(exam: { format?: string; name?: string; subjects?: Subject[]; optionsCount?: number } | undefined | null): boolean {
+  if (!exam) return false;
+  if (isTytExam(exam) || isAytExam(exam)) return false;
+  const name = (exam.name || '').toLowerCase();
+  if (name.includes('lgs')) return true;
+  if (exam.subjects && exam.subjects.length === 6 && exam.subjects.some(s => s.name.toLowerCase().includes('inkılap'))) return true;
+  const totalQ = exam.subjects ? exam.subjects.reduce((sum, s) => sum + s.count, 0) : 0;
+  if (totalQ === 90 && exam.optionsCount === 4) return true;
+  if (exam.format === 'mebi' && (name.includes('mebi') || name.includes('ortaokul') || name.includes('8.'))) return true;
   if (exam.subjects && exam.subjects.length >= 4) {
     const hasTurkce = exam.subjects.some(s => s.name.toLowerCase().includes('türk'));
     const hasMat = exam.subjects.some(s => s.name.toLowerCase().includes('mat'));
     const hasFen = exam.subjects.some(s => s.name.toLowerCase().includes('fen'));
-    if (hasTurkce && (hasMat || hasFen)) return true;
+    if (hasTurkce && (hasMat || hasFen) && exam.optionsCount === 4) return true;
   }
   return false;
 }
@@ -235,18 +286,18 @@ export function calculateScore(
   key: string[],
   penalty: number,
   subjects: Subject[],
-  format?: string
+  format?: string,
+  examName?: string
 ): EvaluatedScore {
-  const total = { correct: 0, wrong: 0, empty: 0, net: 0, lgsScore: 0, percentile: 100.0 };
+  const total = { correct: 0, wrong: 0, empty: 0, net: 0, lgsScore: 0, percentile: 100.0, tytScore: 0, aytScore: 0, examType: 'standard' as 'lgs' | 'tyt' | 'ayt' | 'standard' };
   const subjectScores: { [key: number]: { correct: number; wrong: number; empty: number; net: number } } = {};
   let qIndex = 0;
 
-  const isLgs = format === 'mebi' || (subjects && subjects.some(s => {
-    const nl = s.name.toLowerCase();
-    return nl.includes('türk') || nl.includes('mat') || nl.includes('inkılap');
-  }) && subjects.length >= 4);
+  const mockExam = { format, name: examName, subjects };
+  const isTyt = isTytExam(mockExam);
+  const isAyt = isAytExam(mockExam);
+  const isLgs = isLgsExam(mockExam);
 
-  // LGS 2026 Taban Puanı (Tam net yapıldığında 194.76 + 305.24 = 500.000)
   let lgsTotal = 194.76;
   let totalNetPointsContribution = 0;
   let allZeroNet = true;
@@ -281,14 +332,26 @@ export function calculateScore(
       allZeroNet = false;
     }
 
-    if (isLgs) {
-      const nameLower = sub.name.toLocaleLowerCase('tr-TR');
+    const nameLower = sub.name.toLocaleLowerCase('tr-TR');
 
-      // LGS 2026 Resmi Katsayı Değerleri (Projeksiyon Standart Sapma ve Türkiye Ortalamaları Katsayılandırılmıştır)
-      // Türkçe (20 Soru): 4.326 | Matematik (20 Soru): 5.048 | Fen (20 Soru): 4.116
-      // İnkılap (10 Soru): 1.674 | Din Kültürü (10 Soru): 1.652 | İngilizce (10 Soru): 1.568
-      // Toplam Net Katsayısı Katkısı: 86.52 + 100.96 + 82.32 + 16.74 + 16.52 + 15.68 = 305.24
-      // 194.760 (Taban) + 305.240 = 500.000 Tam Puan
+    if (isTyt) {
+      // TYT 2026 Standart Katsayı Projeksiyonu:
+      // Taban: 100.00 Puan
+      // Türkçe (40 Soru): 3.30 Puan/Net
+      // Temel Matematik (40 Soru): 3.30 Puan/Net
+      // Sosyal Bilimler (20 Soru): 3.40 Puan/Net
+      // Fen Bilimleri (20 Soru): 3.40 Puan/Net
+      let coeff = 3.30;
+      if (nameLower.includes("türk")) coeff = 3.30;
+      else if (nameLower.includes("mat")) coeff = 3.30;
+      else if (nameLower.includes("sosyal") || nameLower.includes("tarih") || nameLower.includes("coğraf") || nameLower.includes("felsefe") || nameLower.includes("din")) coeff = 3.40;
+      else if (nameLower.includes("fen") || nameLower.includes("fizik") || nameLower.includes("kimya") || nameLower.includes("biyoloji")) coeff = 3.40;
+      totalNetPointsContribution += (netVal * coeff);
+    } else if (isAyt) {
+      // AYT Genel Puan Projeksiyonu: 100 Taban + (Netler * 2.50)
+      totalNetPointsContribution += (netVal * 2.50);
+    } else if (isLgs) {
+      // LGS 2026 Resmi Katsayı Değerleri
       let coeff = 1.60;
       if (nameLower.includes("türk")) coeff = 4.326;
       else if (nameLower.includes("mat")) coeff = 5.048;
@@ -302,7 +365,28 @@ export function calculateScore(
     }
   });
 
-  if (isLgs) {
+  if (isTyt) {
+    total.examType = 'tyt';
+    if (total.net <= 0 && allZeroNet) {
+      total.tytScore = 100.00;
+    } else {
+      const calc = 100.0 + totalNetPointsContribution;
+      total.tytScore = Math.max(100.0, Math.min(500.0, Math.round(calc * 1000) / 1000));
+    }
+    total.lgsScore = total.tytScore;
+    total.percentile = 0;
+  } else if (isAyt) {
+    total.examType = 'ayt';
+    if (total.net <= 0 && allZeroNet) {
+      total.aytScore = 100.00;
+    } else {
+      const calc = 100.0 + totalNetPointsContribution;
+      total.aytScore = Math.max(100.0, Math.min(500.0, Math.round(calc * 1000) / 1000));
+    }
+    total.lgsScore = total.aytScore;
+    total.percentile = 0;
+  } else if (isLgs) {
+    total.examType = 'lgs';
     if (total.net <= 0 && allZeroNet) {
       total.lgsScore = 100.00;
       total.percentile = 99.99;
@@ -318,18 +402,23 @@ export function calculateScore(
 
 export function exportToCSV(exam: Exam, specificResults: ExamResult[] | null = null) {
   const isLgs = isLgsExam(exam);
+  const isTyt = isTytExam(exam);
+  const isAyt = isAytExam(exam);
   let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
   csvContent += "Ogrenci No;Ad Soyad;Sinif;Sube;Kitapcik;";
   exam.subjects.forEach(sub => { csvContent += `${sub.name} D;${sub.name} Y;${sub.name} N;`; });
   csvContent += "TOPLAM D;TOPLAM Y;TOPLAM B;TOPLAM NET;";
-  if (isLgs) csvContent += "PUAN;DİLİM;";
+  if (isTyt) csvContent += "TYT PUANI;";
+  else if (isAyt) csvContent += "AYT PUANI;";
+  else if (isLgs) csvContent += "LGS PUANI;DİLİM;";
+  else csvContent += "PUAN;";
   csvContent += "\n";
 
   const resultsToExport = specificResults || exam.results;
 
   resultsToExport.forEach(res => {
     const key = exam.keys[res.booklet] || exam.keys["A"];
-    const score = calculateScore(res.answers, key, exam.penalty, exam.subjects, exam.format);
+    const score = calculateScore(res.answers, key, exam.penalty, exam.subjects, exam.format, exam.name);
 
     let row = `${res.no};${res.name};${res.classStr || ""};${res.sectionStr || ""};${res.booklet};`;
     exam.subjects.forEach(sub => {
@@ -337,9 +426,15 @@ export function exportToCSV(exam: Exam, specificResults: ExamResult[] | null = n
       row += `${ss.correct};${ss.wrong};${ss.net.toFixed(2).replace('.', ',')};`;
     });
     row += `${score.total.correct};${score.total.wrong};${score.total.empty};${score.total.net.toFixed(2).replace('.', ',')};`;
-    if (isLgs) {
+    if (isTyt) {
+      row += `${(score.total.tytScore || score.total.lgsScore).toFixed(2).replace('.', ',')};`;
+    } else if (isAyt) {
+      row += `${(score.total.aytScore || score.total.lgsScore).toFixed(2).replace('.', ',')};`;
+    } else if (isLgs) {
       row += `${score.total.lgsScore.toFixed(2).replace('.', ',')};`;
       row += `%${score.total.percentile.toFixed(2).replace('.', ',')};`;
+    } else {
+      row += `${score.total.lgsScore.toFixed(2).replace('.', ',')};`;
     }
     csvContent += row + "\n";
   });
