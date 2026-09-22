@@ -1,5 +1,6 @@
 {
-  "name": "react-example",
+  "name": "optik-ai",
+  "description": "Yapay Zeka Destekli Profesyonel Optik Okuma ve Sınav Değerlendirme Sistemi",
   "private": true,
   "version": "0.0.0",
   "type": "module",
