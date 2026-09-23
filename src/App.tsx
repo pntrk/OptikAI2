@@ -583,35 +583,28 @@ export default function App() {
         </div>
 
         {/* Aktif Sınav & Açılır Sınav Listesi */}
-        <div className="px-2.5 py-2 border-b border-slate-800/60 bg-slate-900/90">
-          <div className="rounded-xl bg-slate-800/80 border border-slate-700/60 transition-all overflow-hidden shadow-xs">
+        <div className="px-2 py-1 border-b border-slate-800/60 bg-slate-900/90">
+          <div className="rounded-lg bg-slate-800/80 border border-slate-700/60 transition-all overflow-hidden shadow-2xs">
             {/* Tıklanabilir Başlık / Aktif Sınav Özeti */}
             <div
               onClick={() => setIsExamDropdownOpen(!isExamDropdownOpen)}
-              className="px-2.5 py-2 flex items-center justify-between cursor-pointer hover:bg-slate-700/40 transition-all duration-150 group select-none relative"
+              className="px-2 py-1 flex items-center justify-between cursor-pointer hover:bg-slate-700/40 transition-all duration-150 group select-none relative gap-1.5"
               title="Kayıtlı sınavlar listesini aç / kapat"
             >
-              <div className="min-w-0 flex-1 pr-1.5">
-                <div className="text-[9px] uppercase font-bold text-blue-400 tracking-wider flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block ring-2 ring-emerald-500/30 animate-pulse" />
-                  <span>Aktif Sınav</span>
-                  <span className="text-[9px] bg-slate-800 text-slate-300 font-semibold px-1.5 py-0.2 rounded border border-slate-700/60 ml-auto">
-                    {exams.length} Sınav
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 ring-2 ring-emerald-500/30 animate-pulse" />
+                  <span className="text-xs font-bold text-slate-100 truncate tracking-tight min-w-0 flex-1" title={currentExam.name}>
+                    {currentExam.name}
                   </span>
                 </div>
-                <div className="text-xs font-bold text-slate-100 truncate mt-0.5 tracking-tight" title={currentExam.name}>
-                  {currentExam.name}
-                </div>
-                <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1 flex-wrap">
-                  <span className="bg-slate-800/90 text-slate-300 px-1.5 py-0.2 rounded border border-slate-700/50 font-mono text-[9px]">
-                    {currentExam.subjects.length} Ders
-                  </span>
-                  <span className="bg-slate-800/90 text-slate-300 px-1.5 py-0.2 rounded border border-slate-700/50 font-mono text-[9px]">
-                    {totalQ} Soru
-                  </span>
-                  <span className="bg-blue-950/60 text-blue-300 font-bold px-1.5 py-0.2 rounded border border-blue-800/50 font-mono text-[9px]">
-                    {currentExam.results.length} Form
-                  </span>
+                <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1 font-mono">
+                  <span>{totalQ} Soru</span>
+                  <span>•</span>
+                  <span>{currentExam.subjects.length} Ders</span>
+                  <span>•</span>
+                  <span className="text-blue-300 font-semibold">{currentExam.results.length} Form</span>
+                  <span className="text-slate-500 font-sans text-[9px] ml-auto">({exams.length})</span>
                 </div>
               </div>
 
@@ -620,24 +613,24 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => handleCloneExam(currentExam.id)}
-                  title="Aktif sınavı kopyala ve klonla"
-                  className="p-1 text-slate-400 hover:text-indigo-400 hover:bg-slate-700/80 rounded-md transition-colors cursor-pointer"
+                  title="Aktif sınavı kopyala"
+                  className="p-1 text-slate-400 hover:text-indigo-300 hover:bg-slate-700/70 rounded transition-colors cursor-pointer"
                 >
                   <Icons.Copy />
                 </button>
                 <button
                   type="button"
                   onClick={() => handleExportSingleExam()}
-                  title="Aktif sınavı JSON olarak indir"
-                  className="p-1 text-slate-400 hover:text-blue-400 hover:bg-slate-700/80 rounded-md transition-colors cursor-pointer"
+                  title="JSON indir"
+                  className="p-1 text-slate-400 hover:text-blue-300 hover:bg-slate-700/70 rounded transition-colors cursor-pointer"
                 >
                   <Icons.Download />
                 </button>
                 <button
                   type="button"
                   onClick={() => handleDeleteExam(currentExam.id)}
-                  title="Aktif sınavı hafızadan sil"
-                  className="p-1 text-slate-400 hover:text-red-400 hover:bg-slate-700/80 rounded-md transition-colors cursor-pointer"
+                  title="Sınavı sil"
+                  className="p-1 text-slate-400 hover:text-red-400 hover:bg-slate-700/70 rounded transition-colors cursor-pointer"
                 >
                   <Icons.Trash />
                 </button>
@@ -645,7 +638,7 @@ export default function App() {
                   type="button"
                   onClick={() => setIsExamDropdownOpen(!isExamDropdownOpen)}
                   title={isExamDropdownOpen ? "Listeyi Kapat" : "Sınav Listesini Aç"}
-                  className="p-1 text-slate-400 hover:text-white hover:bg-slate-700/80 rounded-md transition-colors cursor-pointer"
+                  className="p-1 text-slate-400 hover:text-white hover:bg-slate-700/70 rounded transition-colors cursor-pointer"
                 >
                   <span className={`inline-block transition-transform duration-200 ${isExamDropdownOpen ? 'rotate-180 text-blue-400' : ''}`}>
                     <Icons.ChevronDown />
@@ -818,9 +811,6 @@ export default function App() {
                 <Icons.Camera />
               </span>
               <span>Canlı Tarama</span>
-              <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
-                AI
-              </span>
             </button>
           </div>
 
@@ -828,7 +818,6 @@ export default function App() {
           <div>
             <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider px-3 mb-1.5 flex items-center justify-between">
               <span>Öğrenci Listesi</span>
-              <span className="text-[9px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.2 rounded font-bold">Sabit</span>
             </div>
             <button
               onClick={() => setActiveTab('students')}
@@ -929,8 +918,7 @@ export default function App() {
             </button>
           )}
 
-          <div id="powered-by-kumcu" className="text-center flex items-center justify-between px-2 pt-1">
-            <span className="text-[10px] text-slate-500">v5.4 • Çevrimdışı</span>
+          <div id="powered-by-kumcu" className="text-center flex items-center justify-center px-2 pt-1">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-800/80 border border-slate-700/60 shadow-xs">
               <span className="text-[9px] font-medium text-slate-400">Powered by</span>
               <span className="text-[10px] font-black text-blue-400 tracking-wider">Kumcu</span>
