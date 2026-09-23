@@ -652,7 +652,7 @@ export function ResultsTab({ exam, updateExam, schoolStudents, showAlert, showCo
 
     return filtered.map(res => {
       const key = exam.keys[res.booklet] || exam.keys["A"];
-      return { ...res, scores: calculateScore(res.answers, key, exam.penalty, exam.subjects, exam.format) };
+      return { ...res, scores: calculateScore(res.answers, key, exam.penalty, exam.subjects, exam.format, exam.name, exam.optionsCount) };
     }).sort((a, b) => {
       if (isLgs) {
         if (b.scores.total.lgsScore !== a.scores.total.lgsScore) {

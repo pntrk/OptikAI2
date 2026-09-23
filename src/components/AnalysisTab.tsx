@@ -48,8 +48,8 @@ export function AnalysisTab({ exam, totalQ, showAlert }: AnalysisTabProps) {
     if (exam.results.length === 0) return [];
 
     const sortedResults = [...exam.results].sort((a, b) => {
-      const scoreA = calculateScore(a.answers, exam.keys[a.booklet] || exam.keys["A"], exam.penalty, exam.subjects, exam.format).total.net;
-      const scoreB = calculateScore(b.answers, exam.keys[b.booklet] || exam.keys["A"], exam.penalty, exam.subjects, exam.format).total.net;
+      const scoreA = calculateScore(a.answers, exam.keys[a.booklet] || exam.keys["A"], exam.penalty, exam.subjects, exam.format, exam.name, exam.optionsCount).total.net;
+      const scoreB = calculateScore(b.answers, exam.keys[b.booklet] || exam.keys["A"], exam.penalty, exam.subjects, exam.format, exam.name, exam.optionsCount).total.net;
       return scoreB - scoreA;
     });
 

@@ -55,7 +55,7 @@ export const initialExam: Exam = {
   logo: null,
   studentList: [],
   layoutType: 'split',
-  format: 'mebi',
+  format: 'lgs',
   subjects: [
     { id: 1, name: "Türkçe", count: 20, section: 1 },
     { id: 2, name: "T.C. İnkılap", count: 10, section: 1 },
@@ -220,12 +220,27 @@ export const LGS_2026_PERCENTILE_TABLE = [
   { score: 100.00, percentile: 99.99 }
 ];
 
+export function normalizeTurkish(text?: string): string {
+  if (!text) return '';
+  return text
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ı/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .trim();
+}
+
 export function isTytExam(exam: { format?: string; name?: string; subjects?: Subject[]; optionsCount?: number } | undefined | null): boolean {
   if (!exam) return false;
   if (exam.format === 'tyt') return true;
-  const name = (exam.name || '').toLowerCase();
-  if (name.includes('tyt') || name.includes('temel yeterlilik')) return true;
-  if (exam.subjects && exam.subjects.some(s => s.name.toLowerCase().includes('temel mat'))) return true;
+  const nameNorm = normalizeTurkish(exam.name);
+  if (nameNorm.includes('tyt') || nameNorm.includes('temel yeterlilik')) return true;
+  if (exam.subjects && exam.subjects.some(s => normalizeTurkish(s.name).includes('temel mat'))) return true;
   const totalQ = exam.subjects ? exam.subjects.reduce((sum, s) => sum + s.count, 0) : 0;
   if (totalQ === 120 && exam.optionsCount === 5) return true;
   return false;
@@ -234,10 +249,10 @@ export function isTytExam(exam: { format?: string; name?: string; subjects?: Sub
 export function isAytExam(exam: { format?: string; name?: string; subjects?: Subject[]; optionsCount?: number } | undefined | null): boolean {
   if (!exam) return false;
   if (exam.format === 'ayt') return true;
-  const name = (exam.name || '').toLowerCase();
-  if (name.includes('ayt') || name.includes('alan yeterlilik')) return true;
+  const nameNorm = normalizeTurkish(exam.name);
+  if (nameNorm.includes('ayt') || nameNorm.includes('alan yeterlilik')) return true;
   if (exam.subjects && exam.subjects.some(s => {
-    const sn = s.name.toLowerCase();
+    const sn = normalizeTurkish(s.name);
     return sn.includes('edebiyat') || sn.includes('sosyal-2') || sn.includes('sosyal 2');
   })) return true;
   const totalQ = exam.subjects ? exam.subjects.reduce((sum, s) => sum + s.count, 0) : 0;
@@ -248,18 +263,26 @@ export function isAytExam(exam: { format?: string; name?: string; subjects?: Sub
 export function isLgsExam(exam: { format?: string; name?: string; subjects?: Subject[]; optionsCount?: number } | undefined | null): boolean {
   if (!exam) return false;
   if (isTytExam(exam) || isAytExam(exam)) return false;
-  const name = (exam.name || '').toLowerCase();
-  if (name.includes('lgs')) return true;
-  if (exam.subjects && exam.subjects.length === 6 && exam.subjects.some(s => s.name.toLowerCase().includes('inkılap'))) return true;
-  const totalQ = exam.subjects ? exam.subjects.reduce((sum, s) => sum + s.count, 0) : 0;
-  if (totalQ === 90 && exam.optionsCount === 4) return true;
-  if (exam.format === 'mebi' && (name.includes('mebi') || name.includes('ortaokul') || name.includes('8.'))) return true;
+  if (exam.format === 'lgs') return true;
+  const nameNorm = normalizeTurkish(exam.name);
+  if (nameNorm.includes('lgs') || nameNorm.includes('liselere gecis')) return true;
+
   if (exam.subjects && exam.subjects.length >= 4) {
-    const hasTurkce = exam.subjects.some(s => s.name.toLowerCase().includes('türk'));
-    const hasMat = exam.subjects.some(s => s.name.toLowerCase().includes('mat'));
-    const hasFen = exam.subjects.some(s => s.name.toLowerCase().includes('fen'));
-    if (hasTurkce && (hasMat || hasFen) && exam.optionsCount === 4) return true;
+    const normSubjectNames = exam.subjects.map(s => normalizeTurkish(s.name));
+    const hasTurkce = normSubjectNames.some(n => n.includes('turk'));
+    const hasMat = normSubjectNames.some(n => n.includes('mat'));
+    const hasFen = normSubjectNames.some(n => n.includes('fen'));
+    const hasInkilap = normSubjectNames.some(n => n.includes('inkilap') || n.includes('sosyal'));
+
+    if (hasInkilap && (hasTurkce || hasMat || hasFen)) return true;
+    if (exam.subjects.length === 6 && (hasTurkce && hasMat && hasFen)) return true;
+    if (hasTurkce && (hasMat || hasFen) && (exam.optionsCount === 4 || !exam.optionsCount)) return true;
   }
+
+  const totalQ = exam.subjects ? exam.subjects.reduce((sum, s) => sum + s.count, 0) : 0;
+  if (totalQ === 90 && (exam.optionsCount === 4 || !exam.optionsCount)) return true;
+  if (exam.format === 'mebi') return true;
+
   return false;
 }
 
@@ -287,18 +310,19 @@ export function calculateScore(
   penalty: number,
   subjects: Subject[],
   format?: string,
-  examName?: string
+  examName?: string,
+  optionsCount?: number
 ): EvaluatedScore {
   const total = { correct: 0, wrong: 0, empty: 0, net: 0, lgsScore: 0, percentile: 100.0, tytScore: 0, aytScore: 0, examType: 'standard' as 'lgs' | 'tyt' | 'ayt' | 'standard' };
   const subjectScores: { [key: number]: { correct: number; wrong: number; empty: number; net: number } } = {};
   let qIndex = 0;
 
-  const mockExam = { format, name: examName, subjects };
+  const mockExam = { format, name: examName, subjects, optionsCount: optionsCount ?? 4 };
   const isTyt = isTytExam(mockExam);
   const isAyt = isAytExam(mockExam);
   const isLgs = isLgsExam(mockExam);
 
-  let lgsTotal = 194.76;
+  let lgsBaseScore = 194.76;
   let totalNetPointsContribution = 0;
   let allZeroNet = true;
 
@@ -332,7 +356,7 @@ export function calculateScore(
       allZeroNet = false;
     }
 
-    const nameLower = sub.name.toLocaleLowerCase('tr-TR');
+    const nameNorm = normalizeTurkish(sub.name);
 
     if (isTyt) {
       // TYT 2026 Standart Katsayı Projeksiyonu:
@@ -342,23 +366,23 @@ export function calculateScore(
       // Sosyal Bilimler (20 Soru): 3.40 Puan/Net
       // Fen Bilimleri (20 Soru): 3.40 Puan/Net
       let coeff = 3.30;
-      if (nameLower.includes("türk")) coeff = 3.30;
-      else if (nameLower.includes("mat")) coeff = 3.30;
-      else if (nameLower.includes("sosyal") || nameLower.includes("tarih") || nameLower.includes("coğraf") || nameLower.includes("felsefe") || nameLower.includes("din")) coeff = 3.40;
-      else if (nameLower.includes("fen") || nameLower.includes("fizik") || nameLower.includes("kimya") || nameLower.includes("biyoloji")) coeff = 3.40;
+      if (nameNorm.includes("turk")) coeff = 3.30;
+      else if (nameNorm.includes("mat")) coeff = 3.30;
+      else if (nameNorm.includes("sosyal") || nameNorm.includes("tarih") || nameNorm.includes("cograf") || nameNorm.includes("felsefe") || nameNorm.includes("din")) coeff = 3.40;
+      else if (nameNorm.includes("fen") || nameNorm.includes("fizik") || nameNorm.includes("kimya") || nameNorm.includes("biyoloji")) coeff = 3.40;
       totalNetPointsContribution += (netVal * coeff);
     } else if (isAyt) {
       // AYT Genel Puan Projeksiyonu: 100 Taban + (Netler * 2.50)
       totalNetPointsContribution += (netVal * 2.50);
     } else if (isLgs) {
-      // LGS 2026 Resmi Katsayı Değerleri
+      // LGS 2026 Resmi MEB Katsayı Değerleri
       let coeff = 1.60;
-      if (nameLower.includes("türk")) coeff = 4.326;
-      else if (nameLower.includes("mat")) coeff = 5.048;
-      else if (nameLower.includes("fen")) coeff = 4.116;
-      else if (nameLower.includes("ink") || nameLower.includes("sosyal") || nameLower.includes("tarih")) coeff = 1.674;
-      else if (nameLower.includes("din") || nameLower.includes("ahlak")) coeff = 1.652;
-      else if (nameLower.includes("ing") || nameLower.includes("yabancı") || nameLower.includes("dil")) coeff = 1.568;
+      if (nameNorm.includes("turk")) coeff = 4.326;
+      else if (nameNorm.includes("mat")) coeff = 5.048;
+      else if (nameNorm.includes("fen")) coeff = 4.116;
+      else if (nameNorm.includes("ink") || nameNorm.includes("sosyal") || nameNorm.includes("tarih")) coeff = 1.674;
+      else if (nameNorm.includes("din") || nameNorm.includes("ahlak")) coeff = 1.652;
+      else if (nameNorm.includes("ing") || nameNorm.includes("yabanci") || nameNorm.includes("dil")) coeff = 1.568;
       else coeff = sub.count >= 20 ? 4.20 : 1.65;
 
       totalNetPointsContribution += (netVal * coeff);
@@ -391,10 +415,14 @@ export function calculateScore(
       total.lgsScore = 100.00;
       total.percentile = 99.99;
     } else {
-      const calculatedScore = lgsTotal + totalNetPointsContribution;
+      const calculatedScore = lgsBaseScore + totalNetPointsContribution;
       total.lgsScore = Math.max(100.0, Math.min(500.0, Math.round(calculatedScore * 1000) / 1000));
       total.percentile = calculateLgsPercentile(total.lgsScore);
     }
+  } else {
+    total.examType = 'standard';
+    total.lgsScore = 0;
+    total.percentile = 0;
   }
 
   return { total, subjectScores };
@@ -418,7 +446,7 @@ export function exportToCSV(exam: Exam, specificResults: ExamResult[] | null = n
 
   resultsToExport.forEach(res => {
     const key = exam.keys[res.booklet] || exam.keys["A"];
-    const score = calculateScore(res.answers, key, exam.penalty, exam.subjects, exam.format, exam.name);
+    const score = calculateScore(res.answers, key, exam.penalty, exam.subjects, exam.format, exam.name, exam.optionsCount);
 
     let row = `${res.no};${res.name};${res.classStr || ""};${res.sectionStr || ""};${res.booklet};`;
     exam.subjects.forEach(sub => {

@@ -40,7 +40,7 @@ const TEMPLATES: TemplatePreset[] = [
     optionsCount: 4,
     penalty: 3,
     layoutType: 'split',
-    format: 'mebi',
+    format: 'lgs',
     subjects: [
       { id: 1, name: 'Türkçe', count: 20, section: 1 },
       { id: 2, name: 'T.C. İnkılap', count: 10, section: 1 },
@@ -160,7 +160,7 @@ export function SettingsTab({
   const [examSearch, setExamSearch] = useState('');
   const [showExamsModal, setShowExamsModal] = useState(false);
   const [showBackupModal, setShowBackupModal] = useState(false);
-  const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
+  const [showTemplatePickerModal, setShowTemplatePickerModal] = useState(false);
 
   // Hafıza kullanım hesabı
   const storageUsedBytes = typeof window !== 'undefined' ? (localStorage.getItem('omr_exams_v54_unified')?.length || 0) * 2 : 0;
@@ -243,6 +243,7 @@ export function SettingsTab({
         format: tpl.format,
         subjects: tpl.subjects.map((s, idx) => ({ ...s, id: Date.now() + idx }))
       });
+      setShowTemplatePickerModal(false);
       showAlert(`"${tpl.name}" şablonu başarıyla uygulandı!`);
     });
   };
@@ -366,19 +367,60 @@ export function SettingsTab({
 
         {/* 4 Kolonlu Kural Kontrolleri */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* 1. Form Tipi */}
-          <div className="p-3 bg-slate-50/70 rounded-xl border border-slate-200/70 flex flex-col justify-between gap-2">
+          {/* 1. Sınav Şablonu (Hızlı Şablon Seçimi) */}
+          <div className="p-3 bg-gradient-to-b from-amber-50/80 to-amber-50/30 rounded-xl border border-amber-200/90 flex flex-col justify-between gap-2 shadow-2xs">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Form Türü</span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-mono">
-                QR Kod
+              <span className="text-[11px] font-extrabold text-amber-900 uppercase tracking-wider flex items-center gap-1">
+                <Icons.Sparkles />
+                <span>Sınav Şablonu</span>
               </span>
+              {activeTemplate ? (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300/80 font-mono truncate max-w-[85px]">
+                  {activeTemplate.badge}
+                </span>
+              ) : (
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 font-mono">
+                  {totalQ} Soru
+                </span>
+              )}
             </div>
-            <div className="bg-white border border-blue-200/90 py-2 px-2.5 rounded-lg text-center flex items-center justify-center gap-1.5 shadow-2xs">
-              <span className="text-blue-600 text-xs font-black">✓</span>
-              <span className="text-xs font-bold text-blue-950 truncate">Kişiye Özel Karekodlu</span>
+
+            <div className="relative">
+              <select
+                value={activeTemplate ? activeTemplate.id : "custom"}
+                onChange={(e) => {
+                  if (e.target.value === "custom") return;
+                  const selectedTpl = TEMPLATES.find(t => t.id === e.target.value);
+                  if (selectedTpl) handleApplyTemplate(selectedTpl);
+                }}
+                className="w-full bg-white border border-amber-300/90 hover:border-amber-400 text-slate-900 text-xs font-bold py-1.5 pl-2.5 pr-7 rounded-lg shadow-2xs outline-none focus:ring-2 focus:ring-amber-500/20 cursor-pointer transition-all appearance-none"
+              >
+                <option value="custom" disabled={!activeTemplate}>
+                  {activeTemplate ? `✓ ${activeTemplate.name}` : `Özel Dağılım (${totalQ} Soru)`}
+                </option>
+                <optgroup label="Hazır Şablonlar">
+                  {TEMPLATES.map(tpl => (
+                    <option key={tpl.id} value={tpl.id}>
+                      {tpl.name} ({tpl.badge})
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-amber-600">
+                <Icons.ChevronDown />
+              </div>
             </div>
-            <span className="text-[10px] text-slate-400 text-center">Öğrenci ve kitapçık otomatik eşleşir</span>
+
+            <div className="flex items-center justify-between text-[10px] text-amber-900 font-medium">
+              <span className="truncate">{activeTemplate ? activeTemplate.name : "Özel Soru Dağılımı"}</span>
+              <button
+                type="button"
+                onClick={() => setShowTemplatePickerModal(true)}
+                className="text-[10px] font-bold text-amber-700 hover:text-amber-950 underline underline-offset-2 shrink-0 cursor-pointer"
+              >
+                İncele
+              </button>
+            </div>
           </div>
 
           {/* 2. Yanlış Kuralı */}
@@ -612,140 +654,7 @@ export function SettingsTab({
         </div>
       </div>
 
-      {/* 4. HAZIR SINAV ŞABLONLARI (Pratik Sihirbaz) */}
-      <div id="quick-templates-section" className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden transition-all">
-        {/* Başlık & Aç / Kapa Butonu */}
-        <div
-          onClick={() => setIsTemplatesOpen(!isTemplatesOpen)}
-          className="px-4 sm:px-5 py-3.5 bg-slate-50/70 hover:bg-slate-100/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer select-none transition-colors border-b border-transparent"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-200/80 text-amber-600 flex items-center justify-center shrink-0 shadow-xs text-base">
-              <Icons.Sparkles />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h4 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight">Pratik Sınav Şablonları</h4>
-                {activeTemplate ? (
-                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300/80 shadow-2xs">
-                    Aktif: {activeTemplate.name}
-                  </span>
-                ) : (
-                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs">
-                    Özel Dağılım ({totalQ} Soru)
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5 truncate">
-                Tek tıkla hazır ders dağılımı, soru formatı ve puanlama kuralı uygulayın
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            className={`self-end sm:self-auto px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs active:scale-95 ${
-              isTemplatesOpen
-                ? 'bg-amber-600 text-white shadow-amber-500/20'
-                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-            }`}
-          >
-            <span>{isTemplatesOpen ? 'Şablonları Gizle' : 'Şablonları İncele'}</span>
-            <span className={`transform transition-transform duration-200 ${isTemplatesOpen ? 'rotate-180' : 'rotate-0'}`}>
-              <Icons.ChevronDown />
-            </span>
-          </button>
-        </div>
-
-        {/* Açılan Şablon Kartları Listesi */}
-        {isTemplatesOpen && (
-          <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50/40 space-y-2.5 animate-in fade-in duration-150">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-              {TEMPLATES.map(tpl => {
-                const isCurrent =
-                  exam.optionsCount === tpl.optionsCount &&
-                  exam.layoutType === tpl.layoutType &&
-                  exam.format === tpl.format &&
-                  exam.subjects.length === tpl.subjects.length;
-
-                const tplTotalQ = tpl.subjects.reduce((sum, s) => sum + s.count, 0);
-
-                return (
-                  <div
-                    key={tpl.id}
-                    className={`p-3 rounded-xl border transition-all flex flex-col justify-between gap-2.5 ${
-                      isCurrent
-                        ? 'bg-blue-50/80 border-blue-400 ring-2 ring-blue-500/20 shadow-2xs'
-                        : 'bg-white border-slate-200 hover:border-slate-300 shadow-2xs'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="text-xs sm:text-sm font-extrabold text-slate-900 tracking-tight">
-                          {tpl.name}
-                        </span>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-mono">
-                            {tpl.badge}
-                          </span>
-                          {isCurrent && (
-                            <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
-                              ✓ Aktif
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 mt-1">
-                        <span>{tpl.optionsCount} Şık</span>
-                        <span>•</span>
-                        <span>{tpl.penalty > 0 ? `${tpl.penalty}Y = 1D` : 'Net Düşmez'}</span>
-                        <span>•</span>
-                        <span>{tpl.layoutType === 'split' ? '2 Parça (Sözel/Sayısal)' : 'Tek Parça'}</span>
-                      </div>
-
-                      <div className="flex items-center gap-1 flex-wrap mt-2">
-                        {tpl.subjects.map((sub, sIdx) => (
-                          <span
-                            key={sIdx}
-                            className="text-[10px] bg-slate-50 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 font-mono"
-                          >
-                            {sub.name}: <strong className="text-blue-700 font-bold">{sub.count}</strong>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleApplyTemplate(tpl)}
-                      className={`w-full py-2 px-3 rounded-lg font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 shadow-2xs ${
-                        isCurrent
-                          ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                          : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/15'
-                      }`}
-                    >
-                      {isCurrent ? (
-                        <>
-                          <Icons.CheckCircle />
-                          <span>Yeniden Uygula</span>
-                        </>
-                      ) : (
-                        <>
-                          <Icons.Sparkles />
-                          <span>Şablonu Uygula ({tplTotalQ} Soru)</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* 5. DERSLER VE SORU SAYILARI KARTI */}
+      {/* 4. DERSLER VE SORU SAYILARI KARTI */}
       <div id="question-distribution-section" className="bg-white rounded-2xl shadow-xs border border-slate-200/90 p-4 sm:p-5 transition-all space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-slate-100">
           <div className="flex items-center gap-3">
@@ -1183,6 +1092,143 @@ export function SettingsTab({
                 type="button"
                 onClick={() => setShowBackupModal(false)}
                 className="px-4 py-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+              >
+                Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: PRATİK SINAV ŞABLONLARI DİYALOĞU */}
+      {showTemplatePickerModal && (
+        <div
+          className="fixed inset-0 z-[250] bg-slate-900/80 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => setShowTemplatePickerModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh] overflow-hidden border border-slate-300 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
+                  <Icons.Sparkles />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-black text-slate-800 tracking-tight">Pratik Sınav Şablonları</h3>
+                    {activeTemplate && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300/80">
+                        Aktif: {activeTemplate.name}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500">Tek tıkla hazır ders dağılımı, soru formatı ve puanlama kuralı uygulayın</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTemplatePickerModal(false)}
+                className="p-2 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition-colors cursor-pointer"
+              >
+                <Icons.X />
+              </button>
+            </div>
+
+            {/* Modal Body: Şablon Listesi */}
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-3 custom-scrollbar">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {TEMPLATES.map(tpl => {
+                  const isCurrent =
+                    exam.optionsCount === tpl.optionsCount &&
+                    exam.layoutType === tpl.layoutType &&
+                    exam.format === tpl.format &&
+                    exam.subjects.length === tpl.subjects.length;
+
+                  const tplTotalQ = tpl.subjects.reduce((sum, s) => sum + s.count, 0);
+
+                  return (
+                    <div
+                      key={tpl.id}
+                      className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between gap-3 ${
+                        isCurrent
+                          ? 'bg-amber-50/70 border-amber-400 ring-2 ring-amber-500/20 shadow-2xs'
+                          : 'bg-white border-slate-200 hover:border-amber-300 hover:shadow-xs shadow-2xs'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span className="text-xs sm:text-sm font-extrabold text-slate-900 tracking-tight">
+                            {tpl.name}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-mono">
+                              {tpl.badge}
+                            </span>
+                            {isCurrent && (
+                              <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                ✓ Aktif
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 mt-1">
+                          <span>{tpl.optionsCount} Şık</span>
+                          <span>•</span>
+                          <span>{tpl.penalty > 0 ? `${tpl.penalty}Y = 1D` : 'Net Düşmez'}</span>
+                          <span>•</span>
+                          <span>{tpl.layoutType === 'split' ? '2 Parça (Sözel/Sayısal)' : 'Tek Parça'}</span>
+                        </div>
+
+                        <div className="flex items-center gap-1 flex-wrap mt-2.5">
+                          {tpl.subjects.map((sub, sIdx) => (
+                            <span
+                              key={sIdx}
+                              className="text-[10px] bg-slate-50 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 font-mono"
+                            >
+                              {sub.name}: <strong className="text-amber-800 font-bold">{sub.count}</strong>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleApplyTemplate(tpl)}
+                        className={`w-full py-2 px-3 rounded-lg font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 shadow-2xs ${
+                          isCurrent
+                            ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                            : 'bg-amber-600 text-white hover:bg-amber-700 shadow-amber-500/15'
+                        }`}
+                      >
+                        {isCurrent ? (
+                          <>
+                            <Icons.CheckCircle />
+                            <span>Yeniden Uygula</span>
+                          </>
+                        ) : (
+                          <>
+                            <Icons.Sparkles />
+                            <span>Şablonu Uygula ({tplTotalQ} Soru)</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3 border-t border-slate-200 bg-slate-50/70 flex items-center justify-between shrink-0">
+              <span className="text-xs text-slate-500 font-medium">Toplam {TEMPLATES.length} Hazır Şablon</span>
+              <button
+                type="button"
+                onClick={() => setShowTemplatePickerModal(false)}
+                className="px-4 py-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer active:scale-95 shadow-2xs"
               >
                 Kapat
               </button>
