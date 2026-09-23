@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Exam, ExamResult, EvaluatedScore, Student } from '../types';
 import { Icons } from './Icons';
 import { OPTS_4, OPTS_5, calculateScore, exportToCSV, isLgsExam, isTytExam, isAytExam } from '../constants';
@@ -7,19 +7,81 @@ interface StudentReportModalProps {
   student: ExamResult & { scores: EvaluatedScore };
   exam: Exam;
   onClose: () => void;
+  onUpdateStudent?: (updated: ExamResult) => void;
 }
 
-export function StudentReportModal({ student, exam, onClose }: StudentReportModalProps) {
-  const key = exam.keys[student.booklet] || exam.keys["A"];
+export function StudentReportModal({ student, exam, onClose, onUpdateStudent }: StudentReportModalProps) {
+  const [currentStudent, setCurrentStudent] = useState<ExamResult & { scores: EvaluatedScore }>(student);
+  const [lastEditedQuestion, setLastEditedQuestion] = useState<number | null>(null);
+
+  useEffect(() => {
+    setCurrentStudent(student);
+  }, [student]);
+
+  const key = exam.keys[currentStudent.booklet] || exam.keys["A"];
   const isLgs = isLgsExam(exam);
   const isTyt = isTytExam(exam);
   const isAyt = isAytExam(exam);
+  const options = exam.optionsCount === 4 ? OPTS_4 : OPTS_5;
+
+  const handleAnswerChange = (qIndex: number, newAns: string) => {
+    const updatedAnswers = [...currentStudent.answers];
+    const totalQuestions = exam.subjects.reduce((sum, s) => sum + s.count, 0);
+    while (updatedAnswers.length < totalQuestions) {
+      updatedAnswers.push("");
+    }
+    const cleanAns = newAns.toUpperCase().trim();
+    updatedAnswers[qIndex] = cleanAns;
+
+    const currentKey = exam.keys[currentStudent.booklet] || exam.keys["A"];
+    const newScores = calculateScore(
+      updatedAnswers,
+      currentKey,
+      exam.penalty,
+      exam.subjects,
+      exam.format,
+      exam.name,
+      exam.optionsCount
+    );
+
+    const updatedStudentObj: ExamResult & { scores: EvaluatedScore } = {
+      ...currentStudent,
+      answers: updatedAnswers,
+      scores: newScores
+    };
+
+    setCurrentStudent(updatedStudentObj);
+    setLastEditedQuestion(qIndex);
+    onUpdateStudent?.(updatedStudentObj);
+  };
+
+  const handleBookletChange = (newBooklet: string) => {
+    const newKey = exam.keys[newBooklet] || exam.keys["A"];
+    const newScores = calculateScore(
+      currentStudent.answers,
+      newKey,
+      exam.penalty,
+      exam.subjects,
+      exam.format,
+      exam.name,
+      exam.optionsCount
+    );
+
+    const updatedStudentObj: ExamResult & { scores: EvaluatedScore } = {
+      ...currentStudent,
+      booklet: newBooklet,
+      scores: newScores
+    };
+
+    setCurrentStudent(updatedStudentObj);
+    onUpdateStudent?.(updatedStudentObj);
+  };
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return alert("Lütfen pop-up engelleyiciye izin verin.");
 
-    let html = `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>${student.name} - Sınav Karnesi</title><style>
+    let html = `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>${currentStudent.name} - Sınav Karnesi</title><style>
       @page { size: A4 portrait; margin: 8mm; }
       * { box-sizing: border-box; }
       body { font-family: Arial, sans-serif; padding: 0; margin: 0; color: #333; font-size: 11px; line-height: 1.2; }
@@ -52,29 +114,29 @@ export function StudentReportModal({ student, exam, onClose }: StudentReportModa
         <h1>ÖĞRENCİ SINAV KARNESİ</h1>
       </div>
       <div class="info">
-        <div>Adı Soyadı: <span>${student.name}</span></div>
-        <div>Öğrenci No: <span>${student.no}</span></div>
-        <div>Sınıf/Şube: <span>${student.classStr} / ${student.sectionStr}</span></div>
-        <div>Kitapçık: <span>${student.booklet}</span></div>
+        <div>Adı Soyadı: <span>${currentStudent.name}</span></div>
+        <div>Öğrenci No: <span>${currentStudent.no}</span></div>
+        <div>Sınıf/Şube: <span>${currentStudent.classStr} / ${currentStudent.sectionStr}</span></div>
+        <div>Kitapçık: <span>${currentStudent.booklet}</span></div>
       </div>
       <div class="summary">
-        <div class="sum-box"><div class="sum-title">Toplam Doğru</div><div class="sum-val" style="color: #16a34a">${student.scores.total.correct}</div></div>
-        <div class="sum-box"><div class="sum-title">Toplam Yanlış</div><div class="sum-val" style="color: #dc2626">${student.scores.total.wrong}</div></div>
-        <div class="sum-box"><div class="sum-title">Toplam Boş</div><div class="sum-val" style="color: #64748b">${student.scores.total.empty}</div></div>
-        <div class="sum-box" style="background:#eff6ff; border-color:#bfdbfe;"><div class="sum-title" style="color:#1d4ed8;">Toplam Net</div><div class="sum-val" style="color: #1d4ed8">${student.scores.total.net.toFixed(2).replace('.', ',')}</div></div>
-        ${isLgs ? `<div class="sum-box" style="background:#fdf4ff; border-color:#c084fc;"><div class="sum-title" style="color:#7e22ce;">PUAN (LGS 2026)</div><div class="sum-val" style="color: #7e22ce">${student.scores.total.lgsScore.toFixed(2).replace('.', ',')}</div></div><div class="sum-box" style="background:#faf5ff; border-color:#e879f9;"><div class="sum-title" style="color:#a21caf;">DİLİM (Genel)</div><div class="sum-val" style="color: #a21caf">%${student.scores.total.percentile.toFixed(2).replace('.', ',')}</div></div>` : isTyt ? `<div class="sum-box" style="background:#eff6ff; border-color:#93c5fd;"><div class="sum-title" style="color:#1d4ed8;">TYT PUANI</div><div class="sum-val" style="color: #1d4ed8">${(student.scores.total.tytScore ?? student.scores.total.lgsScore).toFixed(2).replace('.', ',')}</div></div>` : isAyt ? `<div class="sum-box" style="background:#f0fdf4; border-color:#86efac;"><div class="sum-title" style="color:#15803d;">AYT PUANI</div><div class="sum-val" style="color: #15803d">${(student.scores.total.aytScore ?? student.scores.total.lgsScore).toFixed(2).replace('.', ',')}</div></div>` : ''}
+        <div class="sum-box"><div class="sum-title">Toplam Doğru</div><div class="sum-val" style="color: #16a34a">${currentStudent.scores.total.correct}</div></div>
+        <div class="sum-box"><div class="sum-title">Toplam Yanlış</div><div class="sum-val" style="color: #dc2626">${currentStudent.scores.total.wrong}</div></div>
+        <div class="sum-box"><div class="sum-title">Toplam Boş</div><div class="sum-val" style="color: #64748b">${currentStudent.scores.total.empty}</div></div>
+        <div class="sum-box" style="background:#eff6ff; border-color:#bfdbfe;"><div class="sum-title" style="color:#1d4ed8;">Toplam Net</div><div class="sum-val" style="color: #1d4ed8">${currentStudent.scores.total.net.toFixed(2).replace('.', ',')}</div></div>
+        ${isLgs ? `<div class="sum-box" style="background:#fdf4ff; border-color:#c084fc;"><div class="sum-title" style="color:#7e22ce;">PUAN (LGS 2026)</div><div class="sum-val" style="color: #7e22ce">${currentStudent.scores.total.lgsScore.toFixed(2).replace('.', ',')}</div></div><div class="sum-box" style="background:#faf5ff; border-color:#e879f9;"><div class="sum-title" style="color:#a21caf;">DİLİM (Genel)</div><div class="sum-val" style="color: #a21caf">%${currentStudent.scores.total.percentile.toFixed(2).replace('.', ',')}</div></div>` : isTyt ? `<div class="sum-box" style="background:#eff6ff; border-color:#93c5fd;"><div class="sum-title" style="color:#1d4ed8;">TYT PUANI</div><div class="sum-val" style="color: #1d4ed8">${(currentStudent.scores.total.tytScore ?? currentStudent.scores.total.lgsScore).toFixed(2).replace('.', ',')}</div></div>` : isAyt ? `<div class="sum-box" style="background:#f0fdf4; border-color:#86efac;"><div class="sum-title" style="color:#15803d;">AYT PUANI</div><div class="sum-val" style="color: #15803d">${(currentStudent.scores.total.aytScore ?? currentStudent.scores.total.lgsScore).toFixed(2).replace('.', ',')}</div></div>` : ''}
       </div>
       <div class="grid">
     `;
 
     let qIndex = 0;
     exam.subjects.forEach(sub => {
-      const ss = student.scores.subjectScores[sub.id];
+      const ss = currentStudent.scores.subjectScores[sub.id];
       html += `<div class="subject">
         <div class="sub-head">${sub.name} (D:${ss.correct} Y:${ss.wrong} N:${ss.net.toFixed(2).replace('.', ',')})</div>
         <table><tr><th>#</th><th>Cevap</th><th>Öğr.</th><th>Durum</th></tr>`;
       for (let i = 0; i < sub.count; i++) {
-        const ans = student.answers[qIndex];
+        const ans = currentStudent.answers[qIndex];
         const k = key ? key[qIndex] : undefined;
         const status = !ans ? "B" : (ans === k ? "D" : "Y");
         html += `<tr><td>${i + 1}</td><td>${k || "-"}</td><td>${ans || "-"}</td><td class="${status}">${!ans ? "BOŞ" : (ans === k ? "DOĞRU" : "YANLIŞ")}</td></tr>`;
@@ -91,14 +153,14 @@ export function StudentReportModal({ student, exam, onClose }: StudentReportModa
 
   const handleExportDetailedCSV = () => {
     let csv = "data:text/csv;charset=utf-8,\uFEFF";
-    csv += `Sinav;${exam.name}\nOgrenci Adi;${student.name}\nOgrenci No;${student.no}\nSinif/Sube;${student.classStr}/${student.sectionStr}\nKitapcik;${student.booklet}\n`;
+    csv += `Sinav;${exam.name}\nOgrenci Adi;${currentStudent.name}\nOgrenci No;${currentStudent.no}\nSinif/Sube;${currentStudent.classStr}/${currentStudent.sectionStr}\nKitapcik;${currentStudent.booklet}\n`;
     if (isLgs) {
-      csv += `PUAN;${student.scores.total.lgsScore.toFixed(2).replace('.', ',')}\n`;
-      csv += `DİLİM;%${student.scores.total.percentile.toFixed(2).replace('.', ',')}\n`;
+      csv += `PUAN;${currentStudent.scores.total.lgsScore.toFixed(2).replace('.', ',')}\n`;
+      csv += `DİLİM;%${currentStudent.scores.total.percentile.toFixed(2).replace('.', ',')}\n`;
     } else if (isTyt) {
-      csv += `TYT_PUAN;${(student.scores.total.tytScore ?? student.scores.total.lgsScore).toFixed(2).replace('.', ',')}\n`;
+      csv += `TYT_PUAN;${(currentStudent.scores.total.tytScore ?? currentStudent.scores.total.lgsScore).toFixed(2).replace('.', ',')}\n`;
     } else if (isAyt) {
-      csv += `AYT_PUAN;${(student.scores.total.aytScore ?? student.scores.total.lgsScore).toFixed(2).replace('.', ',')}\n`;
+      csv += `AYT_PUAN;${(currentStudent.scores.total.aytScore ?? currentStudent.scores.total.lgsScore).toFixed(2).replace('.', ',')}\n`;
     }
     csv += `\n`;
     csv += "Ders;Soru No;Dogru Cevap;Ogrenci Cevabi;Durum\n";
@@ -106,7 +168,7 @@ export function StudentReportModal({ student, exam, onClose }: StudentReportModa
     let qIndex = 0;
     exam.subjects.forEach(sub => {
       for (let i = 0; i < sub.count; i++) {
-        const ans = student.answers[qIndex];
+        const ans = currentStudent.answers[qIndex];
         const k = key ? key[qIndex] : undefined;
         const status = !ans ? "BOS" : (ans === k ? "DOGRU" : "YANLIS");
         csv += `${sub.name};${i + 1};${k || "-"};${ans || "-"};${status}\n`;
@@ -117,7 +179,7 @@ export function StudentReportModal({ student, exam, onClose }: StudentReportModa
     const encodedUri = encodeURI(csv);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `${student.name.replace(/\s+/g, "_")}_Karne.csv`);
+    link.setAttribute("download", `${currentStudent.name.replace(/\s+/g, "_")}_Karne.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -136,7 +198,7 @@ export function StudentReportModal({ student, exam, onClose }: StudentReportModa
               <h2 className="text-base sm:text-lg font-bold text-slate-800 tracking-tight flex items-center gap-1.5">
                 Öğrenci Sınav Karnesi
               </h2>
-              <p className="text-xs text-slate-500 font-medium">{student.name} • No: {student.no}</p>
+              <p className="text-xs text-slate-500 font-medium">{currentStudent.name} • No: {currentStudent.no}</p>
             </div>
           </div>
           <button
@@ -148,24 +210,34 @@ export function StudentReportModal({ student, exam, onClose }: StudentReportModa
         </div>
 
         {/* Modal Body */}
-        <div className="p-3 sm:p-6 overflow-y-auto flex-1 space-y-4 sm:space-y-6 custom-scrollbar">
+        <div className="p-3 sm:p-6 overflow-y-auto flex-1 space-y-4 sm:space-y-5 custom-scrollbar">
           {/* Student Info Card */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
             <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
               <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Öğrenci Adı</div>
-              <div className="font-bold text-blue-600 truncate text-sm">{student.name}</div>
+              <div className="font-bold text-blue-600 truncate text-sm">{currentStudent.name}</div>
             </div>
             <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
               <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Numara</div>
-              <div className="font-bold font-mono text-slate-800 text-sm">{student.no}</div>
+              <div className="font-bold font-mono text-slate-800 text-sm">{currentStudent.no}</div>
             </div>
             <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
               <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Sınıf / Şube</div>
-              <div className="font-bold text-slate-800 text-sm">{student.classStr} / {student.sectionStr}</div>
+              <div className="font-bold text-slate-800 text-sm">{currentStudent.classStr} / {currentStudent.sectionStr}</div>
             </div>
             <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
               <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Kitapçık</div>
-              <div className="font-bold text-indigo-700 text-sm">{student.booklet} Kitapçığı</div>
+              <select
+                value={currentStudent.booklet}
+                onChange={(e) => handleBookletChange(e.target.value)}
+                className="font-bold text-indigo-700 text-xs sm:text-sm bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-0.5 outline-none cursor-pointer hover:bg-indigo-100 transition-colors w-full"
+                title="Kitapçık türünü değiştir"
+              >
+                <option value="A">A Kitapçığı</option>
+                <option value="B">B Kitapçığı</option>
+                <option value="C">C Kitapçığı</option>
+                <option value="D">D Kitapçığı</option>
+              </select>
             </div>
           </div>
 
@@ -173,93 +245,145 @@ export function StudentReportModal({ student, exam, onClose }: StudentReportModa
           <div className={`grid gap-2 text-center ${isLgs ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6' : (isTyt || isAyt) ? 'grid-cols-2 sm:grid-cols-5' : 'grid-cols-2 sm:grid-cols-4'}`}>
             <div className="bg-emerald-50/80 border border-emerald-200 p-2.5 sm:p-3 rounded-xl shadow-2xs">
               <div className="text-[10px] text-emerald-700 font-bold uppercase mb-0.5">Doğru</div>
-              <div className="text-xl sm:text-2xl font-black text-emerald-700">{student.scores.total.correct}</div>
+              <div className="text-xl sm:text-2xl font-black text-emerald-700">{currentStudent.scores.total.correct}</div>
             </div>
             <div className="bg-rose-50/80 border border-rose-200 p-2.5 sm:p-3 rounded-xl shadow-2xs">
               <div className="text-[10px] text-rose-700 font-bold uppercase mb-0.5">Yanlış</div>
-              <div className="text-xl sm:text-2xl font-black text-rose-700">{student.scores.total.wrong}</div>
+              <div className="text-xl sm:text-2xl font-black text-rose-700">{currentStudent.scores.total.wrong}</div>
             </div>
             <div className="bg-slate-100 border border-slate-200 p-2.5 sm:p-3 rounded-xl shadow-2xs">
               <div className="text-[10px] text-slate-600 font-bold uppercase mb-0.5">Boş</div>
-              <div className="text-xl sm:text-2xl font-black text-slate-700">{student.scores.total.empty}</div>
+              <div className="text-xl sm:text-2xl font-black text-slate-700">{currentStudent.scores.total.empty}</div>
             </div>
             <div className="bg-blue-50/80 border border-blue-200 p-2.5 sm:p-3 rounded-xl shadow-2xs">
               <div className="text-[10px] text-blue-700 font-bold uppercase mb-0.5">Genel Net</div>
-              <div className="text-xl sm:text-2xl font-black text-blue-700">{student.scores.total.net.toFixed(2).replace('.', ',')}</div>
+              <div className="text-xl sm:text-2xl font-black text-blue-700">{currentStudent.scores.total.net.toFixed(2).replace('.', ',')}</div>
             </div>
             {isLgs ? (
               <>
                 <div className="bg-purple-50/80 border border-purple-200 p-2.5 sm:p-3 rounded-xl shadow-2xs">
                   <div className="text-[10px] text-purple-700 font-bold uppercase mb-0.5">PUAN (LGS 2026)</div>
-                  <div className="text-xl sm:text-2xl font-black text-purple-700">{student.scores.total.lgsScore.toFixed(2).replace('.', ',')}</div>
+                  <div className="text-xl sm:text-2xl font-black text-purple-700">{currentStudent.scores.total.lgsScore.toFixed(2).replace('.', ',')}</div>
                 </div>
                 <div className="bg-fuchsia-50/80 border border-fuchsia-200 p-2.5 sm:p-3 rounded-xl shadow-2xs">
                   <div className="text-[10px] text-fuchsia-700 font-bold uppercase mb-0.5">DİLİM (Genel)</div>
-                  <div className="text-xl sm:text-2xl font-black text-fuchsia-700">%{student.scores.total.percentile.toFixed(2).replace('.', ',')}</div>
+                  <div className="text-xl sm:text-2xl font-black text-fuchsia-700">%{currentStudent.scores.total.percentile.toFixed(2).replace('.', ',')}</div>
                 </div>
               </>
             ) : isTyt ? (
               <div className="bg-indigo-50/80 border border-indigo-200 p-2.5 sm:p-3 rounded-xl shadow-2xs col-span-2 sm:col-span-1">
                 <div className="text-[10px] text-indigo-700 font-bold uppercase mb-0.5">TYT PUANI (ÖSYM)</div>
-                <div className="text-xl sm:text-2xl font-black text-indigo-700">{(student.scores.total.tytScore ?? student.scores.total.lgsScore).toFixed(2).replace('.', ',')}</div>
+                <div className="text-xl sm:text-2xl font-black text-indigo-700">{(currentStudent.scores.total.tytScore ?? currentStudent.scores.total.lgsScore).toFixed(2).replace('.', ',')}</div>
               </div>
             ) : isAyt ? (
               <div className="bg-emerald-50/80 border border-emerald-200 p-2.5 sm:p-3 rounded-xl shadow-2xs col-span-2 sm:col-span-1">
                 <div className="text-[10px] text-emerald-700 font-bold uppercase mb-0.5">AYT PUANI (ÖSYM)</div>
-                <div className="text-xl sm:text-2xl font-black text-emerald-700">{(student.scores.total.aytScore ?? student.scores.total.lgsScore).toFixed(2).replace('.', ',')}</div>
+                <div className="text-xl sm:text-2xl font-black text-emerald-700">{(currentStudent.scores.total.aytScore ?? currentStudent.scores.total.lgsScore).toFixed(2).replace('.', ',')}</div>
               </div>
             ) : null}
           </div>
 
-          {/* Subject Breakdown Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {(() => {
-              let globalQIndex = 0;
-              return exam.subjects.map(sub => {
-                const ss = student.scores.subjectScores[sub.id];
-                const questions: React.ReactNode[] = [];
-                for (let i = 0; i < sub.count; i++) {
-                  const ans = student.answers[globalQIndex];
-                  const k = key ? key[globalQIndex] : undefined;
-                  const statusClass = !ans ? "text-slate-400 font-medium" : (ans === k ? "text-emerald-600 font-bold" : "text-rose-600 font-bold");
-                  const statusText = !ans ? "BOŞ" : (ans === k ? "DOĞRU" : "YANLIŞ");
+          {/* Subject Breakdown Cards & Manual Edit Info */}
+          <div className="space-y-2.5">
+            <div className="bg-blue-50/80 border border-blue-200/90 rounded-xl px-3.5 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-blue-950 shadow-2xs">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-md bg-blue-600 text-white flex items-center justify-center shrink-0 text-xs shadow-2xs">
+                  <Icons.Edit />
+                </span>
+                <div>
+                  <span className="font-black text-blue-900">Manuel Müdahale: </span>
+                  <span className="text-blue-800 text-[11px]">
+                    Hatalı okunan öğrenci cevaplarını aşağıdaki <strong>Öğr.</strong> kutucuklarından doğrudan değiştirebilirsiniz. Puanlar ve sonuç listesi anında güncellenir.
+                  </span>
+                </div>
+              </div>
+              {lastEditedQuestion !== null && (
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 self-start sm:self-auto shrink-0 animate-pulse">
+                  ✓ Soru {lastEditedQuestion + 1} Güncellendi
+                </span>
+              )}
+            </div>
 
-                  questions.push(
-                    <tr key={i} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                      <td className="py-1 px-2 text-center text-slate-400 font-mono text-xs">{i + 1}</td>
-                      <td className="py-1 px-2 text-center font-bold text-slate-700">{k || "-"}</td>
-                      <td className={`py-1 px-2 text-center font-bold ${!ans ? 'text-slate-300' : 'text-blue-600'}`}>{ans || "-"}</td>
-                      <td className={`py-1 px-2 text-center text-[10px] ${statusClass}`}>{statusText}</td>
-                    </tr>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+              {(() => {
+                let globalQIndex = 0;
+                return exam.subjects.map(sub => {
+                  const ss = currentStudent.scores.subjectScores[sub.id];
+                  const questions: React.ReactNode[] = [];
+                  for (let i = 0; i < sub.count; i++) {
+                    const currGlobalIdx = globalQIndex;
+                    const ans = currentStudent.answers[currGlobalIdx];
+                    const k = key ? key[currGlobalIdx] : undefined;
+                    const isCorrect = ans && k && ans === k;
+                    const isWrong = ans && k && ans !== k;
+                    const isEmpty = !ans;
+                    const statusClass = isEmpty
+                      ? "text-slate-400 font-medium"
+                      : isCorrect
+                        ? "text-emerald-600 font-bold"
+                        : "text-rose-600 font-bold";
+                    const statusText = isEmpty ? "BOŞ" : isCorrect ? "DOĞRU" : "YANLIŞ";
+
+                    questions.push(
+                      <tr
+                        key={i}
+                        className={`border-b border-slate-100 transition-colors ${
+                          lastEditedQuestion === currGlobalIdx ? 'bg-amber-50/70' : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        <td className="py-1 px-1.5 text-center text-slate-400 font-mono text-xs">{i + 1}</td>
+                        <td className="py-1 px-1.5 text-center font-bold text-slate-700 font-mono">{k || "-"}</td>
+                        <td className="py-1 px-1 text-center">
+                          <select
+                            value={ans || ""}
+                            onChange={(e) => handleAnswerChange(currGlobalIdx, e.target.value)}
+                            className={`w-11 h-7 text-xs font-black rounded-lg border text-center transition-all cursor-pointer outline-none shadow-2xs ${
+                              isEmpty
+                                ? 'bg-slate-50 border-slate-200 text-slate-400 hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
+                                : isCorrect
+                                  ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20'
+                                  : 'bg-rose-50 border-rose-300 text-rose-700 hover:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
+                            }`}
+                            title="Öğrencinin cevabını değiştirmek için seçin"
+                          >
+                            <option value="">-</option>
+                            {options.map(opt => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className={`py-1 px-1.5 text-center text-[10px] ${statusClass}`}>{statusText}</td>
+                      </tr>
+                    );
+                    globalQIndex++;
+                  }
+
+                  return (
+                    <div key={sub.id} className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden flex flex-col">
+                      <div className="bg-slate-800 text-white px-3 py-2 flex justify-between items-center text-xs font-bold">
+                        <span className="truncate pr-2">{sub.name}</span>
+                        <span className="shrink-0 text-[10px] bg-slate-700 px-2 py-0.5 rounded-full font-mono">
+                          D:{ss.correct} Y:{ss.wrong} <span className="text-emerald-300 ml-1">N:{ss.net.toFixed(2).replace('.', ',')}</span>
+                        </span>
+                      </div>
+                      <div className="overflow-x-auto max-h-60 custom-scrollbar">
+                        <table className="w-full text-xs">
+                          <thead className="bg-slate-50 text-slate-500 uppercase text-[9px] sticky top-0 border-b border-slate-100 z-10">
+                            <tr>
+                              <th className="py-1.5 px-1.5 text-center w-10">Soru</th>
+                              <th className="py-1.5 px-1.5 text-center w-12">Cevap</th>
+                              <th className="py-1.5 px-1 text-center w-14">Öğr.</th>
+                              <th className="py-1.5 px-1.5 text-center">Durum</th>
+                            </tr>
+                          </thead>
+                          <tbody>{questions}</tbody>
+                        </table>
+                      </div>
+                    </div>
                   );
-                  globalQIndex++;
-                }
-
-                return (
-                  <div key={sub.id} className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden flex flex-col">
-                    <div className="bg-slate-800 text-white px-3 py-2 flex justify-between items-center text-xs font-bold">
-                      <span className="truncate pr-2">{sub.name}</span>
-                      <span className="shrink-0 text-[10px] bg-slate-700 px-2 py-0.5 rounded-full font-mono">
-                        D:{ss.correct} Y:{ss.wrong} <span className="text-emerald-300 ml-1">N:{ss.net.toFixed(2).replace('.', ',')}</span>
-                      </span>
-                    </div>
-                    <div className="overflow-x-auto max-h-56 custom-scrollbar">
-                      <table className="w-full text-xs">
-                        <thead className="bg-slate-50 text-slate-500 uppercase text-[9px] sticky top-0 border-b border-slate-100">
-                          <tr>
-                            <th className="py-1 px-1">Soru</th>
-                            <th className="py-1 px-1">Cevap</th>
-                            <th className="py-1 px-1">Öğr.</th>
-                            <th className="py-1 px-1">Durum</th>
-                          </tr>
-                        </thead>
-                        <tbody>{questions}</tbody>
-                      </table>
-                    </div>
-                  </div>
-                );
-              });
-            })()}
+                });
+              })()}
+            </div>
           </div>
         </div>
 
@@ -863,7 +987,27 @@ export function ResultsTab({ exam, updateExam, schoolStudents, showAlert, showCo
     <div className="bg-slate-50 min-h-full flex flex-col gap-3 pb-8 no-print">
       {/* Modal Dialogs */}
       {selectedStudent && (
-        <StudentReportModal student={selectedStudent} exam={exam} onClose={() => setSelectedStudent(null)} />
+        <StudentReportModal
+          student={selectedStudent}
+          exam={exam}
+          onClose={() => setSelectedStudent(null)}
+          onUpdateStudent={(updated) => {
+            updateExam({
+              results: exam.results.map(r => r.id === updated.id ? updated : r)
+            });
+            const key = exam.keys[updated.booklet] || exam.keys["A"];
+            const newScores = calculateScore(
+              updated.answers,
+              key,
+              exam.penalty,
+              exam.subjects,
+              exam.format,
+              exam.name,
+              exam.optionsCount
+            );
+            setSelectedStudent({ ...updated, scores: newScores });
+          }}
+        />
       )}
       {editingStudent && (
         <EditResultModal student={editingStudent} exam={exam} onClose={() => setEditingStudent(null)} onSave={saveEdit} />
